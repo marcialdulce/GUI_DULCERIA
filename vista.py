@@ -39,10 +39,10 @@ class VistaDulceria(tk.Tk):
 
         self.mostrar_pantalla("PantallaLogin")
 
-        def mostrar_pantalla(self, nombre):
+    def mostrar_pantalla(self, nombre):
             self.pantallas[nombre].tkraise()
 
-        def mostrar_alerta(self, titulo, mensaje, tipo="info"):
+    def mostrar_alerta(self, titulo, mensaje, tipo="info"):
             if tipo == "info":
                   messagebox.showinfo(titulo, mensaje)
             else:
