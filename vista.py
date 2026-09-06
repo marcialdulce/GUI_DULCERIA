@@ -17,7 +17,7 @@ NEGRO = "#000000"
 # VENTANA PRINCIPAL
 # ============================================================
 
-class VistaDuleria(tk.Tk):
+class VistaDulceria(tk.Tk):
     def __init__(self, controlador):
         super().__init__()
         self.controlador = controlador
