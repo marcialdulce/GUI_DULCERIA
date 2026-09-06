@@ -124,19 +124,20 @@ class PantallaPrincipal(tk.Frame):
         self.lbl_usuario.config(text=usuario)
 
     def mostrar_seccion(self, opcion):
-        # Restaurar botones
+       
         for nombre, boton in self.botones_menu.items():
             if nombre == opcion:
                 boton.config(bg=ROSA_MENU_ACTIVO)
             else:
                 boton.config(bg=ROSA_MENU)
 
-        # Limpiar contenido anterior
         for widget in self.contenido.winfo_children():
             widget.destroy()
 
         if opcion == "NUEVA VENTA":
             self.construir_nueva_venta()
+        elif opcion == "INVENTARIO":
+            self.construir_inventario()
         else:
             textos = {
                 "INICIO": "Inicio", "INVENTARIO": "Inventario",
@@ -209,4 +210,42 @@ class PantallaPrincipal(tk.Frame):
         tk.Button(frame_botones, text="CANCELAR", bg="#F4D03F", font=("Arial", 10, "bold"), relief="flat").pack(side="left", expand=True, fill="x", padx=5)
         tk.Button(frame_botones, text="COBRAR", bg="#F4D03F", font=("Arial", 10, "bold"), relief="flat").pack(side="right", expand=True, fill="x", padx=5)
 
- 
+    def construir_inventario(self):
+        panel_principal = tk.Frame(self.contenido, bg=FONDO)
+        panel_principal.pack(fill="both", expand=True, padx=40, pady=20)
+
+        # Barra superior (Buscador y Filtros)
+        barra_filtros = tk.Frame(panel_principal, bg="#3A8D96", height=45)
+        barra_filtros.pack(fill="x")
+        barra_filtros.pack_propagate(False)
+        
+        tk.Label(barra_filtros, text="BUSCAR PRODUCTO", bg="#3A8D96", fg=BLANCO, font=("Arial", 10, "bold")).pack(side="left", padx=15)
+        self.txt_buscar_inv = tk.Entry(barra_filtros, width=25)
+        self.txt_buscar_inv.pack(side="left", padx=5)
+
+        tk.Label(barra_filtros, text="MARCA", bg="#3A8D96", fg=BLANCO, font=("Arial", 10, "bold")).pack(side="left", padx=(40, 5))
+        self.combo_marca = ttk.Combobox(barra_filtros, values=["Todas", "Ricolino", "Sonrics", "De la Rosa"], width=15, state="readonly")
+        self.combo_marca.current(0)
+        self.combo_marca.pack(side="left")
+
+        tk.Label(barra_filtros, text="CATEGORÍA", bg="#3A8D96", fg=BLANCO, font=("Arial", 10, "bold")).pack(side="left", padx=(40, 5))
+        self.combo_categoria = ttk.Combobox(barra_filtros, values=["Todas", "Chocolates", "Gomitas", "Frituras"], width=15, state="readonly")
+        self.combo_categoria.current(0)
+        self.combo_categoria.pack(side="left")
+
+        # Tabla de Inventario
+        columnas = ("PRODUCTO", "MARCA", "PRECIO", "STOCK", "ESTADO")
+        self.tabla_inv = ttk.Treeview(panel_principal, columns=columnas, show="headings", height=15)
+        
+        for col in columnas:
+            self.tabla_inv.heading(col, text=col)
+            self.tabla_inv.column(col, anchor="center")
+
+        self.tabla_inv.pack(fill="both", expand=True, pady=15)
+
+        # Datos de prueba
+        self.tabla_inv.insert("", "end", values=("PRODUCTO 1", "X", "$15.00", "20", "BAJO"))
+        self.tabla_inv.insert("", "end", values=("PRODUCTO 2", "X", "$19.00", "24", "BAJO"))
+        self.tabla_inv.insert("", "end", values=("PRODUCTO 3", "X", "$42.00", "46", "MEDIO"))
+
+        
