@@ -1,3 +1,7 @@
+# ============================================================
+# USUARIOS DEL SISTEMA
+# ============================================================
+
 class ModeloDulceria:
 
         def __init__(self):
@@ -9,6 +13,8 @@ class ModeloDulceria:
                         "Josue" : "1234"
                 }
 
+
+# Validación de los usuarios dentro del sistema
 
         def validar_usuario (self, usuario, password):
                 if usuario in self.usuarios and self.usuarios[usuario] == password:

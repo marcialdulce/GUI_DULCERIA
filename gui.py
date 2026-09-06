@@ -36,7 +36,7 @@ class DulceriaApp(tk.Tk):
         self.resizable(False, False)
         self.configure(bg=FONDO)
 
-        # Este contenedor ocupa TODA la ventana.
+        # Este contenedor ocupa TODA la ventana
         self.contenedor = tk.Frame(self, bg=FONDO)
         self.contenedor.pack(fill="both", expand=True)
 
@@ -66,7 +66,6 @@ class DulceriaApp(tk.Tk):
 
     def mostrar_pantalla(self, nombre):
         self.pantallas[nombre].tkraise()
-
 
 # ============================================================
 # INICIO DE SESIÓN

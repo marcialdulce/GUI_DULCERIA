@@ -1,12 +1,21 @@
 import tkinter as tk
 from tkinter import messagebox
 
+# ============================================================
+# COLORES
+# ============================================================
+
 ROSA_CLARO = "#F4C2CC"
 ROSA_MENU = "#CF3D5B"
 ROSA_MENU_ACTIVO = "#B52E4B"
 FONDO = "#FFF9F5"
 BLANCO = "#FFFFFF"
 NEGRO = "#000000"
+
+
+# ============================================================
+# VENTANA PRINCIPAL
+# ============================================================
 
 class VistaDuleria(tk.Tk):
     def __init__(self, controlador):
@@ -38,6 +47,11 @@ class VistaDuleria(tk.Tk):
                   messagebox.showinfo(titulo, mensaje)
             else:
                  messagebox.showerror(titulo, mensaje)
+
+
+# ============================================================
+# INICIO DE SESIÓN
+# ============================================================
 
 class PantallaLogin(tk.Frame):
     def __init__(self, parent, controlador):
