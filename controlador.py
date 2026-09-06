@@ -26,5 +26,11 @@ class ControladorDulceria:
             self.vista.pantallas["PantallaPrincipal"].actualizar_usuario(usuario)
             self.vista.mostrar_pantalla("PantallaPrincipal")
         else:
-            self.vista.mostrar_alerta("Error", "Usuario o contraseña incorrectos.", "error")
+           # VENTANA EMERGENTE DE ERROR
+            self.vista.mostrar_alerta(
+                "Datos incorrectos", 
+                "Las claves de acceso o los datos ingresados no son correctos.\nPor favor, intente nuevamente.", 
+                "error"
+            )
+            self.vista.pantallas["PantallaLogin"].txt_password.delete(0, 'end')
             
