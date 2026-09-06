@@ -33,7 +33,7 @@ class VistaDulceria(tk.Tk):
 
         self.pantallas = {}
         for Pantalla in (PantallaLogin, PantallaPrincipal):
-            frame = Pantalla(parent=self.contenedor, controlador=self) 
+            frame = Pantalla(parent=self.contenedor, controlador=self.controlador) 
             self.pantallas[Pantalla.__name__] = frame
             frame.grid(row=0, column=0, sticky="nsew")
 
