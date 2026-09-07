@@ -35,14 +35,22 @@ class ModeloDulceria:
         def agregar_al_ticket(self, nombre_producto, cantidad):
          for dulce in self.inventario:
             if dulce["nombre"] == nombre_producto:
+                # Si el proudcto está en el ticket, se acumula la cantidad
+                for item in self.ticket_actual: 
+                    if item["producto"] == nombre_producto:
+                        item["cantidad"] += cantidad
+                        item["subtotal"] = item["cantidad"] * dulce["precio"]
+                        return True
+                
+                # Si no está, se agrega por primera vez
                 self.ticket_actual.append({
                     "producto": nombre_producto,
                     "cantidad": cantidad,
                     "subtotal": dulce["precio"] * cantidad
                 })
                 return True
-         return False
-
+            return False
+          
         def calcular_total(self):
             return sum(item["subtotal"] for item in self.ticket_actual)
 

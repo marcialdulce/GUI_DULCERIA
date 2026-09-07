@@ -244,7 +244,7 @@ class PantallaPrincipal(tk.Frame):
         self.combo_categoria.current(0)
         self.combo_categoria.pack(side="left")
 
-        # Tabla de Inventario
+       # --- Tabla de Inventario ---
         columnas = ("PRODUCTO", "MARCA", "PRECIO", "STOCK", "ESTADO")
         self.tabla_inv = ttk.Treeview(panel_principal, columns=columnas, show="headings", height=15)
         
@@ -254,9 +254,22 @@ class PantallaPrincipal(tk.Frame):
 
         self.tabla_inv.pack(fill="both", expand=True, pady=15)
 
-        # Datos de prueba
-        self.tabla_inv.insert("", "end", values=("PRODUCTO 1", "X", "$15.00", "20", "BAJO"))
-        self.tabla_inv.insert("", "end", values=("PRODUCTO 2", "X", "$19.00", "24", "BAJO"))
-        self.tabla_inv.insert("", "end", values=("PRODUCTO 3", "X", "$42.00", "46", "MEDIO"))
+        # Datos dinámicos desde el Modelo
+        for producto in self.controlador.modelo.inventario:
+            # Calculamos el estado visual dependiendo de cuántos quedan
+            if producto["stock"] == 0:
+                estado = "AGOTADO"
+            elif producto["stock"] < 15:
+                estado = "BAJO"
+            else:
+                estado = "MEDIO"
+
+            self.tabla_inv.insert("", "end", values=(
+                producto["nombre"], 
+                producto["marca"], 
+                f"${producto['precio']:.2f}", 
+                producto["stock"], 
+                estado
+            ))
 
         
