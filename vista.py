@@ -78,7 +78,6 @@ class PantallaLogin(tk.Frame):
     def enviar_datos(self):
         usuario = self.txt_usuario.get().strip()
         password = self.txt_password.get()
-        # En lugar de validar aquí, se lo pasamos al Controlador
         self.controlador.procesar_login(usuario, password)
 
 class PantallaPrincipal(tk.Frame):
