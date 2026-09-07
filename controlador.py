@@ -1,3 +1,4 @@
+import tkinter as tk
 from tkinter import messagebox, simpledialog
 from modelo import ModeloDulceria
 from vista import VistaDulceria
@@ -57,7 +58,7 @@ class ControladorDulceria:
                 self.vista.pantallas["PantallaPrincipal"].mostrar_seccion("NUEVA VENTA")
             else:
                 messagebox.showerror("Pago Insuficiente", f"Faltan ${total - pago:.2f} para completar la venta.")
-                
+
     def procesar_agregar(self, nombre_producto):
         # Lanza una ventana emergente nativa pidiendo la cantidad
         cantidad = simpledialog.askinteger("Cantidad", f"¿Cuántos {nombre_producto} deseas agregar?")
@@ -91,3 +92,16 @@ class ControladorDulceria:
         # 3. Actualizamos la etiqueta del Total ($0.00)
         total = self.modelo.calcular_total()
         pantalla.label_total.config(text=f"${total:.2f}")
+
+        def cerrar_sesion(self):
+         # 1. Limpiamos el ticket temporal por seguridad para el siguiente usuario
+           self.modelo.ticket_actual.clear()
+        
+        # 2. Le ordenamos a la ventana principal que muestre el Login
+           self.vista.mostrar_pantalla("PantallaLogin")
+         
+        # 3. Limpiamos las cajas de texto del login si es necesario (opcional)
+        # (Opcional, pero deja la pantalla de login limpia)
+           login_screen = self.vista.pantallas["PantallaLogin"]
+           login_screen.txt_usuario.delete(0, tk.END)
+           login_screen.txt_password.delete(0, tk.END)

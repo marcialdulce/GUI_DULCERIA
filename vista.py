@@ -90,6 +90,16 @@ class PantallaPrincipal(tk.Frame):
         encabezado.pack_propagate(False)
 
         tk.Label(encabezado, text="🍬", font=("Segoe UI Emoji", 40), bg=ROSA_CLARO).place(x=45, y=25)
+        # Botón de Cerrar Sesión en la esquina superior derecha
+        btn_logout = tk.Button(
+            encabezado, text="Cerrar Sesión", 
+            bg="#D9534F", fg=BLANCO, font=("Arial", 8, "bold"),
+            activebackground="#C9302C", activeforeground=BLANCO,
+            relief="flat", cursor="hand2",
+            command=self.controlador.cerrar_sesion
+        )
+        # Lo posicionamos elegantemente abajo del nombre del usuario o a un lado
+        btn_logout.place(relx=0.82, y=88, anchor="center")
         tk.Label(encabezado, text="Dulcería", font=("Segoe Script", 25), bg=ROSA_CLARO, fg=NEGRO).place(x=115, y=33)
 
         self.lbl_usuario = tk.Label(encabezado, text="", font=("Arial", 10, "bold"), bg=ROSA_CLARO, fg=NEGRO)
