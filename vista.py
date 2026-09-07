@@ -197,6 +197,15 @@ class PantallaPrincipal(tk.Frame):
         self.tabla_ticket.column("PRECIO", width=80, anchor="center")
         self.tabla_ticket.pack(fill="both", expand=True, padx=10)
 
+        # =================================================================
+        # RECARGAR EL TICKET DESDE EL MODELO AL CONSTRUIR LA PANTALLA
+        # =================================================================
+        for item in self.controlador.modelo.ticket_actual:
+            self.tabla_ticket.insert("", "end", values=(
+                item["producto"], 
+                item["cantidad"], 
+                f"${item['subtotal']:.2f}"
+            ))
 
         # Total
         frame_total = tk.Frame(panel_der, bg="#F4F4F4")

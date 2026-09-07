@@ -62,10 +62,12 @@ class ControladorDulceria:
         cantidad = simpledialog.askinteger("Cantidad", f"¿Cuántos {nombre_producto} deseas agregar?")
         
         if cantidad and cantidad > 0:
-            # Le pide al Modelo que haga las matemáticas y lo guarde
-            if self.modelo.agregar_al_ticket(nombre_producto, cantidad):
-                # Si se agregó con éxito, le pide a la Vista que se actualice
+            resultado = self.modelo.agregar_al_ticket(nombre_producto, cantidad)
+            
+            if resultado == True:
                 self.actualizar_ticket_visual()
+            elif resultado == "stock_insuficiente":
+                messagebox.showerror("Error de Stock", "No existe cantidad suficiente")
             else:
                 messagebox.showerror("Error", "Producto no encontrado")
 
