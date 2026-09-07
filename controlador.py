@@ -53,3 +53,35 @@ class ControladorDulceria:
                 self.actualizar_ticket_visual() # Limpia la pantalla para la siguiente venta
             else:
                 messagebox.showerror("Pago Insuficiente", f"Faltan ${total - pago:.2f} para completar la venta.")
+
+    def procesar_agregar(self, nombre_producto):
+        # Lanza una ventana emergente nativa pidiendo la cantidad
+        cantidad = simpledialog.askinteger("Cantidad", f"¿Cuántos {nombre_producto} deseas agregar?")
+        
+        if cantidad and cantidad > 0:
+            # Le pide al Modelo que haga las matemáticas y lo guarde
+            if self.modelo.agregar_al_ticket(nombre_producto, cantidad):
+                # Si se agregó con éxito, le pide a la Vista que se actualice
+                self.actualizar_ticket_visual()
+            else:
+                messagebox.showerror("Error", "Producto no encontrado")
+
+    def actualizar_ticket_visual(self):
+        # Accedemos a la pantalla principal donde está dibujada la tabla
+        pantalla = self.vista.pantallas["PantallaPrincipal"]
+        
+        # 1. Borramos los datos viejos de la tabla para no duplicar
+        for fila in pantalla.tabla_ticket.get_children():
+            pantalla.tabla_ticket.delete(fila)
+            
+        # 2. Dibujamos fila por fila leyendo la memoria del Modelo
+        for item in self.modelo.ticket_actual:
+            pantalla.tabla_ticket.insert("", "end", values=(
+                item["producto"], 
+                item["cantidad"], 
+                f"${item['subtotal']:.2f}"
+            ))
+            
+        # 3. Actualizamos la etiqueta del Total ($0.00)
+        total = self.modelo.calcular_total()
+        pantalla.label_total.config(text=f"${total:.2f}")
