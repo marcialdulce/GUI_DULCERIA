@@ -20,8 +20,6 @@ class ModeloDulceria:
                     return True
                 return False
 
-
-class ModeloDulceria:
         def __init__(self):
         # 1. El ticket debe iniciar completamente vacío
          self.ticket_actual = [] 
