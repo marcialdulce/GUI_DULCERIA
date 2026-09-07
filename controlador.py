@@ -93,7 +93,7 @@ class ControladorDulceria:
         total = self.modelo.calcular_total()
         pantalla.label_total.config(text=f"${total:.2f}")
 
-        def cerrar_sesion(self):
+    def cerrar_sesion(self):
          # 1. Limpiamos el ticket temporal por seguridad para el siguiente usuario
            self.modelo.ticket_actual.clear()
         
