@@ -1,3 +1,4 @@
+from tkinter import messagebox, simpledialog
 from modelo import ModeloDulceria
 from vista import VistaDulceria
 
@@ -33,4 +34,22 @@ class ControladorDulceria:
                 "error"
             )
             self.vista.pantallas["PantallaLogin"].txt_password.delete(0, 'end')
+
+    def cobrar_ticket(self):
+        total = self.modelo.calcular_total()
+        
+        if total == 0:
+            messagebox.showwarning("Aviso", "El ticket está vacío. Agrega productos primero.")
+            return
+
+        # Abre una ventanita preguntando la cantidad de pago
+        pago = simpledialog.askfloat("Cobrar Venta", f"Total a cobrar: ${total:.2f}\n¿Con cuánto efectivo paga el cliente?")
+        
+        if pago is not None: # Si el usuario no presionó "Cancelar"
+            exito, cambio = self.modelo.procesar_cobro(pago)
             
+            if exito:
+                messagebox.showinfo("Venta Exitosa", f"Venta procesada correctamente.\n\nCambio a entregar: ${cambio:.2f}")
+                self.actualizar_ticket_visual() # Limpia la pantalla para la siguiente venta
+            else:
+                messagebox.showerror("Pago Insuficiente", f"Faltan ${total - pago:.2f} para completar la venta.")

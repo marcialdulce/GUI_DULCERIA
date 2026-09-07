@@ -210,6 +210,15 @@ class PantallaPrincipal(tk.Frame):
         tk.Button(frame_botones, text="CANCELAR", bg="#F4D03F", font=("Arial", 10, "bold"), relief="flat").pack(side="left", expand=True, fill="x", padx=5)
         tk.Button(frame_botones, text="COBRAR", bg="#F4D03F", font=("Arial", 10, "bold"), relief="flat").pack(side="right", expand=True, fill="x", padx=5)
 
+        tk.Button(
+            frame_botones, 
+            text="COBRAR", 
+            bg="#F4D03F", 
+            font=("Arial", 10, "bold"), 
+            relief="flat",
+            command=self.controlador.cobrar_ticket
+        ).pack(side="right", expand=True, fill="x", padx=5)
+
     def construir_inventario(self):
         panel_principal = tk.Frame(self.contenido, bg=FONDO)
         panel_principal.pack(fill="both", expand=True, padx=40, pady=20)
