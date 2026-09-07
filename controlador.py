@@ -36,13 +36,14 @@ class ControladorDulceria:
             self.vista.pantallas["PantallaLogin"].txt_password.delete(0, 'end')
 
     def cobrar_ticket(self):
+        # 1. Declarar y calcular el total primero
         total = self.modelo.calcular_total()
         
         if total == 0:
             messagebox.showwarning("Aviso", "El ticket está vacío. Agrega productos primero.")
             return
 
-        # Abre una ventanita preguntando la cantidad de pago
+        # 2. Abre una ventanita preguntando la cantidad de pago
         pago = simpledialog.askfloat("Cobrar Venta", f"Total a cobrar: ${total:.2f}\n¿Con cuánto efectivo paga el cliente?")
         
         if pago is not None: # Si el usuario no presionó "Cancelar"
@@ -52,11 +53,11 @@ class ControladorDulceria:
                 messagebox.showinfo("Venta Exitosa", f"Venta procesada correctamente.\n\nCambio a entregar: ${cambio:.2f}")
                 self.actualizar_ticket_visual()
                 
-                # Recarga la vista para actualizar los numeritos del stock en las tarjetas
-                self.vista.mostrar_seccion("NUEVA VENTA") 
+                # Recarga la vista para actualizar el stock en las tarjetas
+                self.vista.pantallas["PantallaPrincipal"].mostrar_seccion("NUEVA VENTA")
             else:
                 messagebox.showerror("Pago Insuficiente", f"Faltan ${total - pago:.2f} para completar la venta.")
-
+                
     def procesar_agregar(self, nombre_producto):
         # Lanza una ventana emergente nativa pidiendo la cantidad
         cantidad = simpledialog.askinteger("Cantidad", f"¿Cuántos {nombre_producto} deseas agregar?")
