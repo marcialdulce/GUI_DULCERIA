@@ -20,10 +20,10 @@ class ModeloDulceria:
         
         # Definimos exactamente 4 productos con sus datos reales
          self.inventario = [
-            {"nombre": "Gomitas", "marca": "Ricolino", "precio": 15.0, "stock": 20},
-            {"nombre": "Chocolate", "marca": "Carlos V", "precio": 12.0, "stock": 15},
-            {"nombre": "Mazapán",  "marca": "De la Rosa", "precio": 5.0, "stock": 50},
-            {"nombre": "Panditas",  "marca": "Ricolino", "precio": 20.0, "stock": 10}
+            {"nombre": "Gomitas", "marca": "Ricolino", "categoria": "Gomitas", "precio": 15.0, "stock": 20},
+            {"nombre": "Chocolate", "marca": "Carlos V", "categoria": "Chocolates", "precio": 12.0, "stock": 15},
+            {"nombre": "Pap's",  "marca": "Totis", "categoria": "Frituras", "precio": 4.0, "stock": 50},
+            {"nombre": "Panditas",  "marca": "Ricolino", "categoria": "Gomitas", "precio": 20.0, "stock": 10}
         ]
 
         # Validación de los usuarios dentro del sistema

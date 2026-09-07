@@ -236,7 +236,7 @@ class PantallaPrincipal(tk.Frame):
 
         # Barra superior (Buscador y Filtros)
         barra_filtros = tk.Frame(panel_principal, bg="#3A8D96", height=45)
-        barra_filtros.pack(fill="x")
+        barra_filtros.pack(fill="x", pady=(0, 10))
         barra_filtros.pack_propagate(False)
         
         tk.Label(barra_filtros, text="BUSCAR PRODUCTO", bg="#3A8D96", fg=BLANCO, font=("Arial", 10, "bold")).pack(side="left", padx=15)
@@ -244,9 +244,9 @@ class PantallaPrincipal(tk.Frame):
         self.txt_buscar_inv.pack(side="left", padx=5)
 
         tk.Label(barra_filtros, text="MARCA", bg="#3A8D96", fg=BLANCO, font=("Arial", 10, "bold")).pack(side="left", padx=(40, 5))
-        self.combo_marca = ttk.Combobox(barra_filtros, values=["Todas", "Ricolino", "Sonrics", "De la Rosa"], width=15, state="readonly")
+        self.combo_marca = ttk.Combobox(barra_filtros, values=["Todas", "Ricolino", "Carlos V", "Totis"], width=15, state="readonly")
         self.combo_marca.current(0)
-        self.combo_marca.pack(side="left")
+        self.combo_marca.pack(side="left") 
 
         tk.Label(barra_filtros, text="CATEGORÍA", bg="#3A8D96", fg=BLANCO, font=("Arial", 10, "bold")).pack(side="left", padx=(40, 5))
         self.combo_categoria = ttk.Combobox(barra_filtros, values=["Todas", "Chocolates", "Gomitas", "Frituras"], width=15, state="readonly")

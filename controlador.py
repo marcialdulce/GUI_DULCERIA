@@ -48,13 +48,13 @@ class ControladorDulceria:
         if pago is not None: # Si el usuario no presionó "Cancelar"
             exito, cambio = self.modelo.procesar_cobro(pago)
             
-        if exito:
+            if exito:
                 messagebox.showinfo("Venta Exitosa", f"Venta procesada correctamente.\n\nCambio a entregar: ${cambio:.2f}")
                 self.actualizar_ticket_visual()
                 
-                # NUEVO: Recarga la vista para actualizar los numeritos del stock en las tarjetas
+                # Recarga la vista para actualizar los numeritos del stock en las tarjetas
                 self.vista.mostrar_seccion("NUEVA VENTA") 
-        else:
+            else:
                 messagebox.showerror("Pago Insuficiente", f"Faltan ${total - pago:.2f} para completar la venta.")
 
     def procesar_agregar(self, nombre_producto):
