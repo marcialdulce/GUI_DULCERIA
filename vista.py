@@ -469,15 +469,23 @@ class PantallaPrincipal(tk.Frame):
             self.construir_inventario()
 
         # ====================================================
-        # APARTADOS
+        # AGOTADOS
+        # ====================================================
+        elif opcion == "AGOTADOS":
+
+            self.construir_agotados()
+
+        # ====================================================
+        # AGOTADOS
         # ====================================================
 
         elif opcion == "APARTADOS":
 
             self.construir_apartados()
 
+
         # ====================================================
-        # OTRAS SECCIONES (AGOTADOS, HISTORIAL)
+        # OTRAS SECCIONES  (HISTORIAL)
         # ====================================================
 
         else:
@@ -1442,8 +1450,87 @@ class PantallaPrincipal(tk.Frame):
         # ----------------------------------------------------
         # TABLA VACÍA
         # ----------------------------------------------------
-
+    
         self.tabla_apartados.pack(
             fill="both",
             expand=True
         )
+
+    # ========================================================
+    # AGOTADOS
+    # ========================================================
+
+    def construir_agotados(self):
+
+        panel_principal = tk.Frame(
+            self.contenido,
+            bg=FONDO
+        )
+
+        panel_principal.pack(
+            fill="both",
+            expand=True,
+            padx=35,
+            pady=35
+        )
+
+        # ----------------------------------------------------
+        # TABLA DE AGOTADOS
+        # ----------------------------------------------------
+
+        columnas = (
+            "PRODUCTO",
+            "MARCA",
+            "STOCK",
+            "ESTADO"
+        )
+
+        self.tabla_agotados = ttk.Treeview(
+            panel_principal,
+            columns=columnas,
+            show="headings",
+            height=16
+        )
+
+        for col in columnas:
+            self.tabla_agotados.heading(
+                col,
+                text=col
+            )
+
+        self.tabla_agotados.column("PRODUCTO", width=250, anchor="center")
+        self.tabla_agotados.column("MARCA", width=200, anchor="center")
+        self.tabla_agotados.column("STOCK", width=150, anchor="center")
+        self.tabla_agotados.column("ESTADO", width=150, anchor="center")
+
+        self.tabla_agotados.pack(
+            fill="both",
+            expand=True
+        )
+
+        # ----------------------------------------------------
+        # FILTRADO Y LLENADO DE DATOS
+        # ----------------------------------------------------
+
+        for producto in self.controlador.modelo.inventario:
+            
+            stock = producto["stock"]
+
+            # Solo se muestran productos con stock menor a 15
+            if stock < 15:
+                
+                if stock == 0:
+                    estado = "AGOTADO"
+                else:
+                    estado = "BAJO"
+
+                self.tabla_agotados.insert(
+                    "",
+                    "end",
+                    values=(
+                        producto["nombre"],
+                        producto["marca"],
+                        stock,
+                        estado
+                    )
+                )
