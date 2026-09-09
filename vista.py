@@ -1095,7 +1095,7 @@ class PantallaPrincipal(tk.Frame):
             "NOMBRE",
             "FECHA DE ENTREGA",
             "PRECIO",
-            "PRODUCTOS APARTADOS"
+            "UNIDADES APARTADAS" 
         )
 
         self.tabla_apartados = ttk.Treeview(
@@ -1130,8 +1130,8 @@ class PantallaPrincipal(tk.Frame):
         )
 
         self.tabla_apartados.heading(
-            "PRODUCTOS APARTADOS",
-            text="PRODUCTOS APARTADOS"
+            "UNIDADES APARTADAS",
+            text="UNIDADES APARTADAS"
         )
 
         # ----------------------------------------------------
@@ -1163,7 +1163,7 @@ class PantallaPrincipal(tk.Frame):
         )
 
         self.tabla_apartados.column(
-            "PRODUCTOS APARTADOS",
+            "UNIDADES APARTADAS",
             width=220,
             anchor="center"
         )
