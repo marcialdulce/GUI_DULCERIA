@@ -394,6 +394,8 @@ class PantallaPrincipal(tk.Frame):
             expand=True
         )
 
+        self.mostrar_seccion("INICIO")
+
 
     # ========================================================
     # ACTUALIZAR USUARIO
@@ -442,9 +444,21 @@ class PantallaPrincipal(tk.Frame):
         # NUEVA VENTA
         # ====================================================
 
+        # ====================================================
+        # NUEVA VENTA
+        # ====================================================
+
         if opcion == "NUEVA VENTA":
 
             self.construir_nueva_venta()
+
+        # ====================================================
+        # INICIO (AGREGA ESTE BLOQUE EXACTAMENTE AQUÍ)
+        # ====================================================
+
+        elif opcion == "INICIO":
+
+            self.construir_inicio()
 
         # ====================================================
         # INVENTARIO
@@ -463,21 +477,27 @@ class PantallaPrincipal(tk.Frame):
             self.construir_apartados()
 
         # ====================================================
-        # OTRAS SECCIONES
+        # OTRAS SECCIONES (AGOTADOS, HISTORIAL)
         # ====================================================
 
         else:
 
             textos = {
-
-                "INICIO": "Inicio",
-
-                "AGOTADOS":
-                "Productos agotados",
-
-                "HISTORIAL":
-                "Historial"
+                "AGOTADOS": "Productos agotados",
+                "HISTORIAL": "Historial"
             }
+
+            tk.Label(
+                self.contenido,
+                text=textos.get(opcion, opcion),
+                font=("Arial", 22, "bold"),
+                bg=FONDO,
+                fg="#333333"
+            ).pack(
+                pady=60
+            )
+
+        
 
             tk.Label(
                 self.contenido,
