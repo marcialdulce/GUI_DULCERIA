@@ -4,7 +4,7 @@ from vistas.ventana_principal import VistaDulceria
 # ============================================================
 # EJECUCIÓN POR PARTE DEL MAIN 
 # ============================================================
-import controlador
+import controladores.controlador as controlador
 
 if __name__ == "__main__":
 
