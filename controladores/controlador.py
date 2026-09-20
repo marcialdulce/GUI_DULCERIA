@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox, simpledialog
-from modelo import ModeloDulceria
+from modelos.modelo import ModeloDulceria
 from vistas.ventana_principal import VistaDulceria
 
 class ControladorDulceria:
@@ -70,18 +70,16 @@ class ControladorDulceria:
                 messagebox.showerror("Error", "Producto no encontrado")
 
     def actualizar_ticket_visual(self):
-        # Gracias a la nueva arquitectura modular, redibujar la tabla manualmente ya no es necesario.
-        # Simplemente ordenamos recargar la sección y el panel se actualiza solo.
         self.vista.pantallas["MenuPrincipal"].mostrar_seccion("NUEVA VENTA")
 
     def cerrar_sesion(self):
-         # 1. Limpiamos el ticket temporal por seguridad para el siguiente usuario
+         # Limpiamos el ticket temporal por seguridad para el siguiente usuario
         self.modelo.ticket_actual.clear()
         
-        # 2. Le ordenamos a la ventana principal que muestre el Login
+        # Le ordenamos a la ventana principal que muestre el Login
         self.vista.mostrar_pantalla("PantallaLogin")
          
-        # 3. Limpiamos las cajas de texto del login
+        # Limpiamos las cajas de texto del login
         login_screen = self.vista.pantallas["PantallaLogin"]
         login_screen.txt_usuario.delete(0, tk.END)
         login_screen.txt_password.delete(0, tk.END)
