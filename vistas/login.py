@@ -1,5 +1,5 @@
 import tkinter as tk
-from vistas.estilos import estilos
+from vistas import estilos
 
 class PantallaLogin(tk.Frame):
     def __init__(self, parent, controlador):

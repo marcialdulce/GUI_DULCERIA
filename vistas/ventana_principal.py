@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox
-from vistas.estilos import estilos
+from vistas import estilos
 from vistas.login import PantallaLogin
 from vistas.menu_principal import MenuPrincipal
 

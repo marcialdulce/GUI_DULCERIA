@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
-from vistas.estilos import estilos
+from vistas import estilos
 
 class PanelInventario(tk.Frame):
     def __init__(self, parent, controlador):

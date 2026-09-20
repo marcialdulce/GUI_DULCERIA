@@ -1,5 +1,5 @@
 import tkinter as tk
-from vistas.estilos import estilos
+from vistas import estilos
 from vistas.panel_inicio import PanelInicio
 from vistas.panel_ventas import PanelVentas
 from vistas.panel_inventario import PanelInventario
