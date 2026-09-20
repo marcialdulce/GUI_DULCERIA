@@ -1,23 +1,23 @@
 import tkinter as tk
 from tkinter import ttk
-from vistas.estilos import *
+from vistas.estilos import estilos
 
 class PanelVentas(tk.Frame):
     def __init__(self, parent, controlador):
-        super().__init__(parent, bg=FONDO)
+        super().__init__(parent, bg=estilos.FONDO)
         self.controlador = controlador
 
         # ====================================================
         # PANEL IZQUIERDO (Buscador y Catálogo)
         # ====================================================
-        panel_izq = tk.Frame(self, bg=FONDO)
+        panel_izq = tk.Frame(self, bg=estilos.FONDO)
         panel_izq.pack(side="left", fill="both", expand=True, padx=20, pady=20)
 
         barra_busqueda = tk.Frame(panel_izq, bg="#3A8D96", height=40)
         barra_busqueda.pack(fill="x")
         barra_busqueda.pack_propagate(False)
 
-        tk.Label(barra_busqueda, text="BUSCAR PRODUCTO", bg="#3A8D96", fg=BLANCO, font=("Arial", 10, "bold")).pack(side="left", padx=10)
+        tk.Label(barra_busqueda, text="BUSCAR PRODUCTO", bg="#3A8D96", fg=estilos.BLANCO, font=("Arial", 10, "bold")).pack(side="left", padx=10)
         tk.Entry(barra_busqueda, width=20).pack(side="right", padx=10, pady=8)
 
         frame_lista = tk.Frame(panel_izq, bg="#EAEAEA")
@@ -25,14 +25,14 @@ class PanelVentas(tk.Frame):
 
         # Llenado dinámico de productos
         for producto in self.controlador.modelo.inventario:
-            item = tk.Frame(frame_lista, bg=BLANCO, pady=10, padx=10, bd=1, relief="solid")
+            item = tk.Frame(frame_lista, bg=estilos.BLANCO, pady=10, padx=10, bd=1, relief="solid")
             item.pack(fill="x", pady=2, padx=2)
 
-            tk.Label(item, text=producto["nombre"], bg=BLANCO, font=("Arial", 9, "bold")).grid(row=0, column=0, sticky="w", columnspan=2)
-            tk.Label(item, text=f"${producto['precio']:.2f}", bg=BLANCO, font=("Arial", 9)).grid(row=1, column=0, sticky="w", pady=5)
-            tk.Label(item, text=f"STOCK: {producto['stock']}", bg=BLANCO, font=("Arial", 9)).grid(row=1, column=1, sticky="w", padx=20)
+            tk.Label(item, text=producto["nombre"], bg=estilos.BLANCO, font=("Arial", 9, "bold")).grid(row=0, column=0, sticky="w", columnspan=2)
+            tk.Label(item, text=f"${producto['precio']:.2f}", bg=estilos.BLANCO, font=("Arial", 9)).grid(row=1, column=0, sticky="w", pady=5)
+            tk.Label(item, text=f"STOCK: {producto['stock']}", bg=estilos.BLANCO, font=("Arial", 9)).grid(row=1, column=1, sticky="w", padx=20)
 
-            btn_agregar = tk.Button(item, text="AGREGAR", bg="#F4D03F", fg=NEGRO, font=("Arial", 9, "bold"), width=15, relief="flat", command=lambda p=producto["nombre"]: self.controlador.procesar_agregar(p))
+            btn_agregar = tk.Button(item, text="AGREGAR", bg="#F4D03F", fg=estilos.NEGRO, font=("Arial", 9, "bold"), width=15, relief="flat", command=lambda p=producto["nombre"]: self.controlador.procesar_agregar(p))
             btn_agregar.grid(row=0, column=2, rowspan=2, sticky="e", padx=10)
             item.grid_columnconfigure(2, weight=1)
 

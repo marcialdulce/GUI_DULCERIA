@@ -1,13 +1,13 @@
 import tkinter as tk
 from tkinter import ttk
-from vistas.estilos import *
+from vistas.estilos import estilos
 
 class PanelApartados(tk.Frame):
     def __init__(self, parent, controlador):
-        super().__init__(parent, bg=FONDO)
+        super().__init__(parent, bg=estilos.FONDO)
         self.controlador = controlador
 
-        panel_principal = tk.Frame(self, bg=FONDO)
+        panel_principal = tk.Frame(self, bg=estilos.FONDO)
         panel_principal.pack(fill="both", expand=True, padx=20, pady=10)
 
         # ----------------------------------------------------
@@ -17,7 +17,7 @@ class PanelApartados(tk.Frame):
         barra_apartados.pack(fill="x", pady=(0, 10))
         barra_apartados.pack_propagate(False)
 
-        tk.Label(barra_apartados, text="APARTADOS", bg="#3A8D96", fg=BLANCO, font=("Arial", 9, "bold")).pack(side="left", padx=12)
+        tk.Label(barra_apartados, text="APARTADOS", bg="#3A8D96", fg=estilos.BLANCO, font=("Arial", 9, "bold")).pack(side="left", padx=12)
 
         # ----------------------------------------------------
         # TABLA DE APARTADOS

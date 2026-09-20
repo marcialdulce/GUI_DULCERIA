@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox
-from vistas.estilos import *
+from vistas.estilos import estilos
 from vistas.login import PantallaLogin
 from vistas.menu_principal import MenuPrincipal
 
@@ -11,9 +11,9 @@ class VistaDulceria(tk.Tk):
         self.title("Dulcería")
         self.geometry("1000x650")
         self.resizable(False, False)
-        self.configure(bg=FONDO)
+        self.configure(bg=estilos.FONDO)
 
-        self.contenedor = tk.Frame(self, bg=FONDO)
+        self.contenedor = tk.Frame(self, bg=estilos.FONDO)
         self.contenedor.pack(fill="both", expand=True)
         self.contenedor.grid_rowconfigure(0, weight=1)
         self.contenedor.grid_columnconfigure(0, weight=1)

@@ -1,13 +1,13 @@
 import tkinter as tk
 from tkinter import ttk
-from vistas.estilos import *
+from vistas.estilos import estilos
 
 class PanelAgotados(tk.Frame):
     def __init__(self, parent, controlador):
-        super().__init__(parent, bg=FONDO)
+        super().__init__(parent, bg=estilos.FONDO)
         self.controlador = controlador
 
-        panel_principal = tk.Frame(self, bg=FONDO)
+        panel_principal = tk.Frame(self, bg=estilos.FONDO)
         panel_principal.pack(fill="both", expand=True, padx=35, pady=35)
 
         # ----------------------------------------------------
