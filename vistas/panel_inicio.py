@@ -1,5 +1,6 @@
 import tkinter as tk
 from vistas import estilos
+FUENTE_EMOJI = ("Segoe UI EMOJI", 38)
 
 class PanelInicio(tk.Frame):
     def __init__(self, parent, controlador, comando_navegar):
@@ -36,7 +37,7 @@ class PanelInicio(tk.Frame):
         tarjeta_catalogo = crear_tarjeta("Estado del catálogo")
         tk.Label(tarjeta_catalogo, text=str(len(productos_disponibles)), bg=estilos.ROSA_MENU, fg=estilos.BLANCO, font=("Arial", 14, "bold"), width=3, height=1).pack(pady=(25, 8))
         tk.Label(tarjeta_catalogo, text="unidades en venta", bg=estilos.BLANCO, fg="#555555", font=("Arial", 11)).pack()
-        tk.Label(tarjeta_catalogo, text="🛒", bg=estilos.BLANCO, fg="#555555", font=("Segoe UI Emoji", 38)).pack(pady=20)
+        tk.Label(tarjeta_catalogo, text="🛒", bg=estilos.BLANCO, fg="#555555", font=FUENTE_EMOJI).pack(pady=20)
 
         # TARJETA 2
         tarjeta_stock = crear_tarjeta("Stock más bajo")
@@ -48,10 +49,10 @@ class PanelInicio(tk.Frame):
             tk.Label(fila, text=producto["nombre"], bg=estilos.BLANCO, fg="#555555", font=("Arial", 9), anchor="w").pack(side="left")
             tk.Label(fila, text=str(producto["stock"]), bg=estilos.BLANCO, fg="#555555", font=("Arial", 9), anchor="e").pack(side="right")
 
-        tk.Label(tarjeta_stock, text="📦", bg=estilos.BLANCO, fg="#555555", font=("Segoe UI Emoji", 38)).pack(pady=20)
+        tk.Label(tarjeta_stock, text="📦", bg=estilos.BLANCO, fg="#555555", font=FUENTE_EMOJI).pack(pady=20)
 
         # TARJETA 3
         tarjeta_cobro = crear_tarjeta("Cobro de artículos")
         tk.Label(tarjeta_cobro, text="¡Caja abierta y lista\npara operar!", bg=estilos.BLANCO, fg="#555555", font=("Arial", 11), justify="center").pack(pady=(25, 15))
         tk.Button(tarjeta_cobro, text="INICIAR VENTA", bg="#F4D03F", fg=estilos.NEGRO, activebackground="#E5C12E", font=("Arial", 10, "bold"), relief="flat", cursor="hand2", padx=15, pady=8, command=lambda: self.comando_navegar("NUEVA VENTA")).pack()
-        tk.Label(tarjeta_cobro, text="🧾", bg=estilos.BLANCO, fg="#555555", font=("Segoe UI Emoji", 38)).pack(pady=18)
+        tk.Label(tarjeta_cobro, text="🧾", bg=estilos.BLANCO, fg="#555555", font=FUENTE_EMOJI).pack(pady=18)
