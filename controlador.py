@@ -1,12 +1,11 @@
 import tkinter as tk
 from tkinter import messagebox, simpledialog
 from modelo import ModeloDulceria
-from vista import VistaDulceria
+from vistas.ventana_principal import VistaDulceria
 
 class ControladorDulceria:
     def __init__(self):
         self.modelo = ModeloDulceria()
-        self.vista = VistaDulceria(self)
         self.usuario_actual = None
 
     def iniciar(self):
@@ -24,9 +23,9 @@ class ControladorDulceria:
             self.vista.pantallas["PantallaLogin"].txt_usuario.delete(0, 'end')
             self.vista.pantallas["PantallaLogin"].txt_password.delete(0, 'end')
             
-            # Actualizar nombre y cambiar pantalla
-            self.vista.pantallas["PantallaPrincipal"].actualizar_usuario(usuario)
-            self.vista.mostrar_pantalla("PantallaPrincipal")
+            # Actualizar nombre y cambiar pantalla al nuevo Menu Principal
+            self.vista.pantallas["MenuPrincipal"].actualizar_usuario(usuario)
+            self.vista.mostrar_pantalla("MenuPrincipal")
         else:
            # VENTANA EMERGENTE DE ERROR
             self.vista.mostrar_alerta(
@@ -53,9 +52,6 @@ class ControladorDulceria:
             if exito:
                 messagebox.showinfo("Venta Exitosa", f"Venta procesada correctamente.\n\nCambio a entregar: ${cambio:.2f}")
                 self.actualizar_ticket_visual()
-                
-                # Recarga la vista para actualizar el stock en las tarjetas
-                self.vista.pantallas["PantallaPrincipal"].mostrar_seccion("NUEVA VENTA")
             else:
                 messagebox.showerror("Pago Insuficiente", f"Faltan ${total - pago:.2f} para completar la venta.")
 
@@ -74,34 +70,18 @@ class ControladorDulceria:
                 messagebox.showerror("Error", "Producto no encontrado")
 
     def actualizar_ticket_visual(self):
-        # Accedemos a la pantalla principal donde está dibujada la tabla
-        pantalla = self.vista.pantallas["PantallaPrincipal"]
-        
-        # 1. Borramos los datos viejos de la tabla para no duplicar
-        for fila in pantalla.tabla_ticket.get_children():
-            pantalla.tabla_ticket.delete(fila)
-            
-        # 2. Dibujamos fila por fila leyendo la memoria del Modelo
-        for item in self.modelo.ticket_actual:
-            pantalla.tabla_ticket.insert("", "end", values=(
-                item["producto"], 
-                item["cantidad"], 
-                f"${item['subtotal']:.2f}"
-            ))
-            
-        # 3. Actualizamos la etiqueta del Total ($0.00)
-        total = self.modelo.calcular_total()
-        pantalla.label_total.config(text=f"${total:.2f}")
+        # Gracias a la nueva arquitectura modular, redibujar la tabla manualmente ya no es necesario.
+        # Simplemente ordenamos recargar la sección y el panel se actualiza solo.
+        self.vista.pantallas["MenuPrincipal"].mostrar_seccion("NUEVA VENTA")
 
     def cerrar_sesion(self):
          # 1. Limpiamos el ticket temporal por seguridad para el siguiente usuario
-           self.modelo.ticket_actual.clear()
+        self.modelo.ticket_actual.clear()
         
         # 2. Le ordenamos a la ventana principal que muestre el Login
-           self.vista.mostrar_pantalla("PantallaLogin")
+        self.vista.mostrar_pantalla("PantallaLogin")
          
-        # 3. Limpiamos las cajas de texto del login si es necesario (opcional)
-        # (Opcional, pero deja la pantalla de login limpia)
-           login_screen = self.vista.pantallas["PantallaLogin"]
-           login_screen.txt_usuario.delete(0, tk.END)
-           login_screen.txt_password.delete(0, tk.END)
+        # 3. Limpiamos las cajas de texto del login
+        login_screen = self.vista.pantallas["PantallaLogin"]
+        login_screen.txt_usuario.delete(0, tk.END)
+        login_screen.txt_password.delete(0, tk.END)
