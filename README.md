@@ -21,7 +21,7 @@ Aplicación de escritorio desarrollada en Python para la administración del pun
 
 El código fuente está dividido lógicamente para separar la interfaz visual de las reglas de negocio:
 
-* `main.py`: Punto de entrada de la aplicación. Inicializa el ciclo principal y arranca el controlador.
-* `controlador.py`: Puente de comunicación. Gestiona los eventos del usuario, valida la lógica de negocio y coordina las actualizaciones entre la vista y el modelo.
-* `vista.py`: Contiene exclusivamente la parte de la interfaz gráfica usando Tkinter. Dibuja las ventanas, tablas y botones.
-* `modelo.py`: Administra los datos y la lógica matemática. Gestiona el catálogo de dulces, el carrito de compras temporal y los cálculos de cobro.
+* `main`: Punto de entrada de la aplicación. Inicializa el ciclo principal y arranca el controlador.
+* `controlador`: Puente de comunicación. Gestiona los eventos del usuario, valida la lógica de negocio y coordina las actualizaciones entre la vista y el modelo.
+* `vista`: Contiene exclusivamente la parte de la interfaz gráfica usando Tkinter. Dibuja las ventanas, tablas y botones.
+* `modelo`: Administra los datos y la lógica matemática. Gestiona el catálogo de dulces, el carrito de compras temporal y los cálculos de cobro.
