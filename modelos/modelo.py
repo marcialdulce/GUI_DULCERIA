@@ -30,7 +30,7 @@ class ModeloDulceria:
         def validar_usuario (self, usuario, password):
            if usuario in self.usuarios and self.usuarios[usuario] == password:
                 return True
-           return False
+           return False 
 
         def agregar_al_ticket(self, nombre_producto, cantidad):
          for dulce in self.inventario:
@@ -78,9 +78,38 @@ class ModeloDulceria:
                  self.ticket_actual.clear() # Vaciamos la lista temporal
                 return True, cambio
             return False, 0.0
-            
 
+        def obtener_inventario_filtrado(self, texto_busqueda, marca, categoria):
+            resultados = []
 
+            for producto in self.inventario:
+                # Veirifica si el proudcto coincide con los filtros
+                coincide_nombre = texto_busqueda in producto["nombre"].lower()
+                coincide_marca = marca == "Todas" or producto["marca"] == marca
+                coincide_cat = categoria == "Todas" or producto["categoria"] == categoria
+
+                if coincide_nombre and coincide_marca and coincide_cat:
+
+                    # Asigna el estado dependiendo de la cantidad en stock
+                    if producto["stock"] == 0:
+                        estado = "AGOTADO"
+                    elif producto["stock"] < 15:
+                        estado = "MEDIO"
+                    else:
+                        estado = "BAJO"
+
+                    # Guarda el producto con su nuevo estado en la lista
+                    resultados.append({
+                        "nombre": producto["nombre"],
+                        "marca": producto["marca"],
+                        "categoria": producto["categoria"],
+                        "precio": producto["precio"],
+                        "stock": producto["stock"],
+                        "estado": estado
+
+                    })
+
+            return resultados
 
         
         

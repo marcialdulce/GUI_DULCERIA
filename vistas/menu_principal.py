@@ -97,4 +97,4 @@ class MenuPrincipal(tk.Frame):
             panel.pack(fill="both", expand=True)
             
         else:
-            tk.Label(self.contenido, text=f"Pantalla de {opcion}\n(Pendiente de modularizar)", font=("Arial", 22, "bold"), bg=estilos.FONDO, fg="#333333").pack(pady=150)
+            tk.Label(self.contenido, text=f"Pantalla de {opcion}\n(Pendiente...)", font=("Arial", 22, "bold"), bg=estilos.FONDO, fg="#333333").pack(pady=150)

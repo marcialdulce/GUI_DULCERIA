@@ -83,3 +83,11 @@ class ControladorDulceria:
         login_screen = self.vista.pantallas["PantallaLogin"]
         login_screen.txt_usuario.delete(0, tk.END)
         login_screen.txt_password.delete(0, tk.END)
+
+    def procesar_filtro_inventario(self, texto, marca, categoria):
+        # Obtiene la lista filtrada desde el modelo
+        return self.modelo.obtener_inventario_filtrado(texto, marca, categoria)
+
+     
+
+        
