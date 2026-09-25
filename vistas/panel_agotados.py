@@ -25,20 +25,18 @@ class PanelAgotados(tk.Frame):
         self.tabla_agotados.column("ESTADO", width=150, anchor="center")
 
         self.tabla_agotados.pack(fill="both", expand=True)
+        self.refrescar_pantalla()
 
-        # ----------------------------------------------------
-        # FILTRADO Y LLENADO DE DATOS
-        # ----------------------------------------------------
-        for producto in self.controlador.modelo.inventario:
-            stock = producto["stock"]
+    def intentar_actualizar(self):
+        self.refrescar_pantalla()
 
-            # Solo se muestran productos con stock menor a 15
-            if stock < 15:
-                if stock == 0:
-                    estado = "AGOTADO"
-                else:
-                    estado = "BAJO"
+    def dibujar_tabla(self, datos_agotados):
+        for fila in self.tabla_agotados.get_children():
+            self.tabla_agotados.delete(fila)
 
-                self.tabla_agotados.insert("", "end", values=(
-                    producto["nombre"], producto["marca"], stock, estado
-                ))
+        for fila_datos in datos_agotados:
+            self.tabla_agotados.insert("", "end", values=fila_datos)
+
+    def refrescar_pantalla(self):
+        datos = self.controlador.obtener_datos_agotados()
+        self.dibujar_tabla(datos)

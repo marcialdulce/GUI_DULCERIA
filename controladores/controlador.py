@@ -73,6 +73,16 @@ class ControladorDulceria:
         # Retorna el inventario, el carrito y el total
         return self.modelo.inventario, self.modelo.ticket_actual, total
 
+    def obtener_datos_agotados(self):
+        productos_filtrados = []
+        for producto in self.modelo.inventario:
+            stock = producto["stock"]
+            if stock < 15:
+                estado = "AGOTADO" if stock == 0 else "BAJO"
+                productos_filtrados.append((producto["nombre"], producto["marca"], stock, estado))
+        
+        return productos_filtrados
+
     def cerrar_sesion(self):
          # Limpiamos el ticket temporal por seguridad para el siguiente usuario
         self.modelo.ticket_actual.clear()
