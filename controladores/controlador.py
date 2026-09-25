@@ -61,11 +61,9 @@ class ControladorDulceria:
         if cantidad and cantidad > 0:
             resultado = self.modelo.agregar_al_ticket(nombre_producto, cantidad)
             
-            if resultado == True:
-                pass
-            elif resultado == "stock_insuficiente":
+            if resultado == "stock_insuficiente":
                 messagebox.showerror("Error de Stock", "No existe cantidad suficiente")
-            else:
+            elif resultado == "no_encontrado":
                 messagebox.showerror("Error", "Producto no encontrado")
 
     def obtener_datos_ventas(self):
