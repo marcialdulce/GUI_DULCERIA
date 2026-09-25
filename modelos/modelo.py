@@ -94,9 +94,9 @@ class ModeloDulceria:
                     if producto["stock"] == 0:
                         estado = "AGOTADO"
                     elif producto["stock"] < 15:
-                        estado = "MEDIO"
-                    else:
                         estado = "BAJO"
+                    else:
+                        estado = "MEDIO"
 
                     # Guarda el producto con su nuevo estado en la lista
                     resultados.append({
