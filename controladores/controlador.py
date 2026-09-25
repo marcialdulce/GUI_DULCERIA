@@ -43,7 +43,7 @@ class ControladorDulceria:
             messagebox.showwarning("Aviso", "El ticket está vacío. Agrega productos primero.")
             return
 
-        # 2. Abre una ventanita preguntando la cantidad de pago
+        # 2. Abre una ventana preguntando la cantidad de pago
         pago = simpledialog.askfloat("Cobrar Venta", f"Total a cobrar: ${total:.2f}\n¿Con cuánto efectivo paga el cliente?")
         
         if pago is not None: # Si el usuario no presionó "Cancelar"
@@ -51,26 +51,27 @@ class ControladorDulceria:
             
             if exito:
                 messagebox.showinfo("Venta Exitosa", f"Venta procesada correctamente.\n\nCambio a entregar: ${cambio:.2f}")
-                self.actualizar_ticket_visual()
             else:
                 messagebox.showerror("Pago Insuficiente", f"Faltan ${total - pago:.2f} para completar la venta.")
 
+
     def procesar_agregar(self, nombre_producto):
-        # Lanza una ventana emergente nativa pidiendo la cantidad
-        cantidad = simpledialog.askinteger("Cantidad", f"¿Cuántos {nombre_producto} deseas agregar?")
+        cantidad = simpledialog.askinteger("Cantidad", f"¿Cuantos {nombre_producto} deseas agregar?")
         
         if cantidad and cantidad > 0:
             resultado = self.modelo.agregar_al_ticket(nombre_producto, cantidad)
             
             if resultado == True:
-                self.actualizar_ticket_visual()
+                pass
             elif resultado == "stock_insuficiente":
                 messagebox.showerror("Error de Stock", "No existe cantidad suficiente")
             else:
                 messagebox.showerror("Error", "Producto no encontrado")
 
-    def actualizar_ticket_visual(self):
-        self.vista.pantallas["MenuPrincipal"].mostrar_seccion("NUEVA VENTA")
+    def obtener_datos_ventas(self):
+        total = self.modelo.calcular_total()
+        # Retorna el inventario, el carrito y el total
+        return self.modelo.inventario, self.modelo.ticket_actual, total
 
     def cerrar_sesion(self):
          # Limpiamos el ticket temporal por seguridad para el siguiente usuario
