@@ -111,5 +111,18 @@ class ModeloDulceria:
 
             return resultados
 
+        def registrar_venta_historica(self, total, metodo_pago, requiere_factura, rfc="", razon_social=""):
+            datos_venta = {
+                "total": total,
+                "metodo_pago": metodo_pago,
+                "facturado": requiere_factura,
+                "datos_fiscales": {
+                    "rfc": rfc,
+                    "razon_social": razon_social
+                },
+                "articulos": self.ticket_actual.copy() 
+            }
+            return True
+
         
         

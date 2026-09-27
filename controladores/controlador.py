@@ -1,5 +1,8 @@
 import tkinter as tk
+import os
 from tkinter import messagebox, simpledialog
+from datetime import datetime
+from reportlab.pdfgen import canvas
 from modelos.modelo import ModeloDulceria
 from vistas.ventana_principal import VistaDulceria
 
@@ -35,26 +38,138 @@ class ControladorDulceria:
             )
             self.vista.pantallas["PantallaLogin"].txt_password.delete(0, 'end')
 
-    def cobrar_ticket(self):
-        # 1. Declarar y calcular el total primero
+    def cobrar_ticket(self, metodo_pago="Efectivo", requiere_factura=False, rfc="", razon_social=""):
+        # Pedir al modelo el carrito y el total
         total = self.modelo.calcular_total()
-        
+
         if total == 0:
-            messagebox.showwarning("Aviso", "El ticket está vacío. Agrega productos primero.")
+            if total == 0:
+              messagebox.showwarning("Aviso", "El ticket se encuentra vacío. Agrega productos primero.")
             return
 
-        # 2. Abre una ventana preguntando la cantidad de pago
-        pago = simpledialog.askfloat("Cobrar Venta", f"Total a cobrar: ${total:.2f}\n¿Con cuánto efectivo paga el cliente?")
-        
-        if pago is not None: # Si el usuario no presionó "Cancelar"
-            exito, cambio = self.modelo.procesar_cobro(pago)
+        # Validar los datos de la factura antes de cobrar
+        if requiere_factura:
+            if rfc.strip() == "" or razon_social.strip() == "":
+                messagebox.showerror("Error", "Debe ingresar el RFC y la razón social para generar la factura.")
+                return
+
+        # IMPORTANTE: Guardamos una copia del carrito antes del cobro, 
+        # porque el Modelo probablemente lo va a borrar al terminar la venta.
+        carrito_comprado = self.modelo.ticket_actual.copy()
+
+        # 2. Cobro (Efectivo o Tarjeta)
+        cambio = 0.0
+        if metodo_pago == "Efectivo":
+            pago = simpledialog.askfloat("Cobrar Venta", f"Total a cobrar: ${total:.2f}\n¿Con cuánto efectivo paga el cliente?")
+            if pago is None: 
+                return # El usuario presionó Cancelar
             
-            if exito:
-                messagebox.showinfo("Venta Exitosa", f"Venta procesada correctamente.\n\nCambio a entregar: ${cambio:.2f}")
-            else:
-                messagebox.showerror("Pago Insuficiente", f"Faltan ${total - pago:.2f} para completar la venta.")
+            exito, cambio = self.modelo.procesar_cobro(pago)
+        else:
+            # Si es Tarjeta, asumimos que pasa el total exacto por la terminal
+            exito, cambio = self.modelo.procesar_cobro(total)
 
+        # Si el pago no fue exitoso (ej. no dio dinero suficiente)
+        if not exito:
+            messagebox.showerror("Pago Insuficiente", "El monto ingresado no cubre el total de la venta.")
+            return
 
+        # Generación del PDF si el cobro fue exitoso y pidieron factura
+        if requiere_factura:
+            try:
+                if not os.path.exists("facturas"):
+                    os.makedirs("facturas")
+
+                # Guarda los archivos PDF dentro de la carpeta y se almacena en gitignore
+                nombre_archivo = f"facturas/Factura_{rfc}.pdf"
+                c = canvas.Canvas(nombre_archivo)
+                fecha_actual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
+       
+                c.setFont("Helvetica-Bold", 14)
+                c.drawString(40, 800, "DULCERÍA MVC S.A. DE C.V.")
+                c.setFont("Helvetica", 10)
+                c.drawString(40, 785, "RFC: DULC202609MVC")
+                c.drawString(40, 770, "Régimen Fiscal: 601 - General de Ley Personas Morales")
+                c.drawString(40, 755, "C.P. de Expedición: 39355 (Acapulco, Gro.)")
+                c.setFont("Helvetica-Bold", 12)
+                c.drawString(320, 800, "FACTURA ELECTRÓNICA (CFDI 4.0)")
+                c.setFont("Helvetica", 10)
+                c.drawString(320, 785, f"Fecha: {fecha_actual}")
+                c.drawString(320, 770, f"Receptor: {razon_social}")
+                c.drawString(320, 755, f"RFC: {rfc}")
+                # Asumimir valores genéricos 
+                c.drawString(320, 740, "C.P.: 39355   |  Uso CFDI: G03 - Gastos en general")
+                c.drawString(320, 725, "Régimen: 612 - Personas Físicas con")
+                c.drawString(320, 710, "Actividades Empresariales")
+                c.line(40, 685, 560, 685)
+
+                c.setFont("Helvetica-Bold", 9)
+                c.drawString(40, 675, "Clave SAT")
+                c.drawString(100, 675, "Cant")
+                c.drawString(140, 675, "UDM")
+                c.drawString(180, 675, "Descripción")
+                c.drawString(400, 675, "P. Unitario")
+                c.drawString(480, 675, "Importe")
+                c.line(40, 670, 560, 670)
+
+                c.setFont("Helvetica", 9)
+                y = 650
+                #  IVA (16%) del total 
+                subtotal_venta = total / 1.16
+                iva_venta = total - subtotal_venta
+
+                for item in carrito_comprado:
+                    precio_sin_iva = (item['subtotal'] / item['cantidad']) / 1.16
+                    importe_sin_iva = item['subtotal'] / 1.16
+
+                    # Imprimir cada dato alineado con su título arriba
+                    c.drawString(40, y, "50161800")
+                    c.drawString(100, y, str(item['cantidad']))
+                    c.drawString(140, y, "H87")
+                    c.drawString(180, y, item['producto'])
+                    c.drawString(400, y, f"${precio_sin_iva:.2f}") 
+                    c.drawString(480, y, f"${importe_sin_iva:.2f}") 
+                    y -= 20
+
+                # TOTALES, MÉTODO DE PAGO Y CAMBIO 
+                c.line(40, y, 560, y)
+                y -= 20
+                
+                forma_pago_sat = "01 - Efectivo" if metodo_pago == "Efectivo" else "04 - Tarjeta de crédito"
+                
+                c.drawString(40, y, "Método de Pago: PUE - Pago en una sola exhibición")
+                c.drawString(40, y-15, f"Forma de Pago: {forma_pago_sat}")
+                c.drawString(40, y-30, "Moneda: MXN - Peso Mexicano")
+                
+                c.drawString(400, y, "Subtotal:")
+                c.drawString(480, y, f"${subtotal_venta:.2f}")
+                
+                c.drawString(400, y-15, "IVA (16%):")
+                c.drawString(480, y-15, f"${iva_venta:.2f}")
+                
+                c.setFont("Helvetica-Bold", 11)
+                c.drawString(400, y-35, "TOTAL:")
+                c.drawString(480, y-35, f"${total:.2f}")
+
+                if metodo_pago == "Efectivo":
+                    c.setFont("Helvetica", 10)
+                    c.drawString(400, y-55, "Efectivo:")
+                    c.drawString(480, y-55, f"${pago:.2f}")
+                    c.setFont("Helvetica-Bold", 10)
+                    c.drawString(400, y-70, "Cambio:")
+                    c.drawString(480, y-70, f"${cambio:.2f}")
+
+                c.save()
+                
+                messagebox.showinfo("Éxito", f"Venta procesada con {metodo_pago}.\nCambio: ${cambio:.2f}\n\nFactura '{nombre_archivo}' generada.")
+            
+            except Exception as e:
+                messagebox.showerror("Error de PDF", f"Cobro exitoso, pero falló la creación del PDF: {e}")
+        else:
+            messagebox.showinfo("Venta Exitosa", f"Venta procesada correctamente con {metodo_pago}.\n\nCambio a entregar: ${cambio:.2f}")
+
+       
     def procesar_agregar(self, nombre_producto):
         cantidad = simpledialog.askinteger("Cantidad", f"¿Cuantos {nombre_producto} deseas agregar?")
         
