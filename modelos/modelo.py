@@ -33,32 +33,34 @@ class ModeloDulceria:
            return False 
 
         def agregar_al_ticket(self, nombre_producto, cantidad):
-         for dulce in self.inventario:
-            if dulce["nombre"] == nombre_producto:
-                # Calcular cuánto ya tenemos de este producto en el ticket actual
-                cantidad_en_ticket = 0
-                for item in self.ticket_actual:
-                    if item["producto"] == nombre_producto:
-                        cantidad_en_ticket = item["cantidad"]
-                
-                # Validar si hay suficiente stock disponible
-                if (cantidad_en_ticket + cantidad) > dulce["stock"]:
-                    return "stock_insuficiente"
+            # Buscar el producto directamente en el inventario
+            dulce = next((d for d in self.inventario if d["nombre"] == nombre_producto), None)
+            
+            if not dulce:
+                return "no_encontrado"
 
-                # Si pasa la validación, acumulamos o agregamos
-                for item in self.ticket_actual:
-                    if item["producto"] == nombre_producto:
-                        item["cantidad"] += cantidad
-                        item["subtotal"] = item["cantidad"] * dulce["precio"]
-                        return True
-                
+            # Buscar si el producto ya existe en el ticket actual
+            item_en_ticket = next((item for item in self.ticket_actual if item["producto"] == nombre_producto), None)
+
+            # Validar si hay suficiente stock disponible sumando lo que ya hay
+            cantidad_actual = item_en_ticket["cantidad"] if item_en_ticket else 0
+            
+            if (cantidad_actual + cantidad) > dulce["stock"]:
+                return "stock_insuficiente"
+
+            #  Si pasa la validación, actualizamos el existente o agregamos uno nuevo
+            if item_en_ticket:
+                item_en_ticket["cantidad"] += cantidad
+                item_en_ticket["subtotal"] = item_en_ticket["cantidad"] * dulce["precio"]
+            else:
+       
                 self.ticket_actual.append({
                     "producto": nombre_producto,
                     "cantidad": cantidad,
                     "subtotal": dulce["precio"] * cantidad
                 })
                 return True
-         return "no_encontrado"
+         
           
         def calcular_total(self):
             return sum(item["subtotal"] for item in self.ticket_actual)
@@ -122,7 +124,9 @@ class ModeloDulceria:
                 },
                 "articulos": self.ticket_actual.copy() 
             }
-            return True
+
+            self.historial_ventas.append(datos_venta)
+            
 
         
         
