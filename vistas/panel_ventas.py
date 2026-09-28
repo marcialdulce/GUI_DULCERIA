@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from vistas import estilos
 
 class PanelVentas(tk.Frame):
@@ -25,7 +25,6 @@ class PanelVentas(tk.Frame):
         self.txt_buscar_venta = tk.Entry(barra_busqueda, width=20)
         self.txt_buscar_venta.pack(side="right", padx=10, pady=8)
 
-        # Canvas con Scrollbar o Frame contenedor adaptativo para el catálogo
         self.frame_lista = tk.Frame(panel_izq, bg="#EAEAEA")
         self.frame_lista.pack(fill="both", expand=True)
 
@@ -56,132 +55,107 @@ class PanelVentas(tk.Frame):
         self.label_total.pack(side="right")
 
         # --------------OPCIONES DE COBRO Y FACTURA-------------
-
         self.metodo_pago = tk.StringVar(value="Efectivo")
+        self.tipo_tarjeta = tk.StringVar(value="Crédito")
         self.quiere_facturar = tk.BooleanVar(value=False)
 
         frame_opciones = tk.Frame(panel_der, bg="#F4F4F4")
         frame_opciones.pack(fill="x", padx=20, pady=5)
 
-        # Meptodos de pago
+        # Métodos de pago
         tk.Label(frame_opciones, text="Método de pago:", bg="#F4F4F4", font=("Arial", 9, "bold")).pack(anchor="w")
         frame_radios = tk.Frame(frame_opciones, bg="#F4F4F4")
         frame_radios.pack(anchor="w", pady=2)
-        tk.Radiobutton(frame_radios, text="Efectivo", variable=self.metodo_pago, value="Efectivo", bg="#F4F4F4").pack(side="left")
-        tk.Radiobutton(frame_radios, text="Tarjeta", variable=self.metodo_pago, value="Tarjeta", bg="#F4F4F4").pack(side="left")
+        
+        tk.Radiobutton(frame_radios, text="Efectivo", variable=self.metodo_pago, value="Efectivo", 
+                       bg="#F4F4F4", command=self.toggle_metodo_pago).pack(side="left")
+        tk.Radiobutton(frame_radios, text="Tarjeta", variable=self.metodo_pago, value="Tarjeta", 
+                       bg="#F4F4F4", command=self.toggle_metodo_pago).pack(side="left")
+
+        # Sub-opciones de Tarjeta (Crédito / Débito) - Ocultas por defecto
+        self.frame_tipo_tarjeta = tk.Frame(frame_opciones, bg="#F4F4F4")
+        tk.Radiobutton(self.frame_tipo_tarjeta, text="Crédito", variable=self.tipo_tarjeta, value="Crédito", bg="#F4F4F4").pack(side="left", padx=(0, 10))
+        tk.Radiobutton(self.frame_tipo_tarjeta, text="Débito", variable=self.tipo_tarjeta, value="Débito", bg="#F4F4F4").pack(side="left")
 
         # Opción si el cliente desea facturar
         tk.Label(frame_opciones, text="¿El cliente requiere Factura?", bg="#F4F4F4", font=("Arial", 9, "bold")).pack(anchor="w", pady=(5,0))
 
         frame_radios_fac = tk.Frame(frame_opciones, bg="#F4F4F4")
         frame_radios_fac.pack(anchor="w")
-        tk.Radiobutton(frame_radios_fac, text="No", variable= self.quiere_facturar, value=False, bg="#F4F4F4", command=self.toogle_datos_factura).pack(side="left")
-        tk.Radiobutton(frame_radios_fac, text="Si", variable= self.quiere_facturar, value=True, bg="#F4F4F4", command=self.toogle_datos_factura).pack(side="left")
+        tk.Radiobutton(frame_radios_fac, text="No", variable=self.quiere_facturar, value=False, bg="#F4F4F4", command=self.toggle_datos_factura).pack(side="left")
+        tk.Radiobutton(frame_radios_fac, text="Si", variable=self.quiere_facturar, value=True, bg="#F4F4F4", command=self.toggle_datos_factura).pack(side="left")
         
-        # Formulario oculto de factura
+        # Formulario completo de factura (Oculto por defecto con Nombre, Correo y RFC)
         self.frame_datos_factura = tk.Frame(frame_opciones, bg="#F4F4F4")
-        tk.Label(self.frame_datos_factura, text="RFC:", bg="#F4F4F4").grid(row=0, column=0, sticky="e", pady=2)
-        self.entry_rfc = tk.Entry(self.frame_datos_factura, width=22)
-        self.entry_rfc.grid(row=0, column=1, pady=2, padx=5)
-
-        tk.Label(self.frame_datos_factura, text="Razón Social:", bg="#F4F4F4").grid(row=1, column=0, sticky="e", pady=2)
+        
+        tk.Label(self.frame_datos_factura, text="Nombre Completo:", bg="#F4F4F4").grid(row=0, column=0, sticky="e", pady=2)
         self.entry_nombre = tk.Entry(self.frame_datos_factura, width=22)
-        self.entry_nombre.grid(row=1, column=1, pady=2, padx=5)
+        self.entry_nombre.grid(row=0, column=1, pady=2, padx=5)
 
+        tk.Label(self.frame_datos_factura, text="Correo:", bg="#F4F4F4").grid(row=1, column=0, sticky="e", pady=2)
+        self.entry_correo = tk.Entry(self.frame_datos_factura, width=22)
+        self.entry_correo.grid(row=1, column=1, pady=2, padx=5)
 
+        tk.Label(self.frame_datos_factura, text="RFC:", bg="#F4F4F4").grid(row=2, column=0, sticky="e", pady=2)
+        self.entry_rfc = tk.Entry(self.frame_datos_factura, width=22)
+        self.entry_rfc.grid(row=2, column=1, pady=2, padx=5)
 
-        # BOTÓN DE COBRAR
+        # BOTÓN DE COBRAR (Conectado a la función procesar_cobro_principal)
         frame_botones = tk.Frame(panel_der, bg="#F4F4F4")
         frame_botones.pack(fill="x", padx=10, pady=10)
-        tk.Button(frame_botones, text="COBRAR", bg="#F4D03F", font=("Arial", 10, "bold"), relief="flat", command=self.abrir_ventana_cobro).pack(side="right", expand=True, fill="x", padx=5)
+        tk.Button(frame_botones, text="COBRAR", bg="#F4D03F", font=("Arial", 10, "bold"), relief="flat", command=self.procesar_cobro_principal).pack(side="right", expand=True, fill="x", padx=5)
         
         self.refrescar_pantalla()
 
-        # FUNCIÓN QUE MUESTRA O OCULTA LOS DATOS DE LA FACTURA
-    def toogle_datos_factura(self):
-        if self.quiere_facturar.get():
-            self.frame_datos_factura.pack(anchor="w")
+    # FUNCIÓN PARA MOSTRAR/OCULTAR TIPO DE TARJETA
+    def toggle_metodo_pago(self):
+        if self.metodo_pago.get() == "Tarjeta":
+            self.frame_tipo_tarjeta.pack(anchor="w", pady=2)
+        else:
+            self.frame_tipo_tarjeta.pack_forget()
 
+    # FUNCIÓN QUE MUESTRA O OCULTA LOS DATOS DE LA FACTURA
+    def toggle_datos_factura(self):
+        if self.quiere_facturar.get():
+            self.frame_datos_factura.pack(anchor="w", pady=5)
         else:
             self.frame_datos_factura.pack_forget()
-            self.entry_rfc.delete(0, tk.END)
             self.entry_nombre.delete(0, tk.END)
-
+            self.entry_correo.delete(0, tk.END)
+            self.entry_rfc.delete(0, tk.END)
 
     def intentar_agregar(self, nombre_producto):
-        # Llamamos al método original de tu controlador que ya funcionaba
         self.controlador.procesar_agregar(nombre_producto)
         self.refrescar_pantalla()
 
-    def abrir_ventana_cobro(self):
-        modal = tk.Toplevel(self)
-        modal.title("Caja - Cobro y Facturación")
-        modal.geometry("450x580")
-        modal.config(bg=estilos.FONDO)
-        modal.grab_set()
+    # FUNCIÓN QUE EJECUTA EL COBRO DESDE LA PANTALLA PRINCIPAL
+    def procesar_cobro_principal(self):
+        metodo = self.metodo_pago.get()
+        # Si pagó con tarjeta, podemos adjuntar si es crédito o débito (puedes estructurarlo como guste tu controlador)
+        detalle_pago = f"{metodo} ({self.tipo_tarjeta.get()})" if metodo == "Tarjeta" else metodo
 
-        tk.Label(modal, text="PROCESAR PAGO", bg=estilos.FONDO, font=("Arial", 12, "bold")).pack(pady=15)
-
-        # Selección de Método de Pago
-        frame_pago = tk.LabelFrame(modal, text=" Método de Pago ", bg=estilos.FONDO, font=("Arial", 10, "bold"))
-        frame_pago.pack(fill="x", padx=20, pady=10)
-
-        tipo_pago = tk.StringVar(value="Efectivo")
-        tk.Radiobutton(frame_pago, text="Efectivo", variable=tipo_pago, value="Efectivo", bg=estilos.FONDO).pack(side="left", padx=20, pady=10)
-        tk.Radiobutton(frame_pago, text="Tarjeta", variable=tipo_pago, value="Tarjeta", bg=estilos.FONDO).pack(side="right", padx=20, pady=10)
-
-        # Sección de Facturación Opcional
-        frame_factura = tk.LabelFrame(modal, text=" Datos de Facturación (Opcional) ", bg=estilos.FONDO, font=("Arial", 10, "bold"))
-        frame_factura.pack(fill="x", padx=20, pady=10)
-
-        # Función para habilitar o deshabilitar los campos según el Checkbutton
-        def alternar_campos_factura():
-            estado = "normal" if requiere_factura.get() else "disabled"
-            txt_nombre.config(state=estado)
-            txt_apellidos.config(state=estado)
-            txt_correo.config(state=estado)
-            txt_rfc.config(state=estado)
-
-        requiere_factura = tk.BooleanVar(value=False)
-        chk_factura = tk.Checkbutton(frame_factura, text="¿Requiere factura?", variable=requiere_factura, 
-                                     command=alternar_campos_factura, bg=estilos.FONDO)
-        chk_factura.pack(anchor="w", padx=10, pady=5)
-
-        campos_factura_frame = tk.Frame(frame_factura, bg=estilos.FONDO)
-        campos_factura_frame.pack(fill="x", padx=10, pady=5)
-
-        tk.Label(campos_factura_frame, text="Nombre(s):", bg=estilos.FONDO).grid(row=0, column=0, sticky="w", pady=2)
-        txt_nombre = tk.Entry(campos_factura_frame, width=30, state="disabled")
-        txt_nombre.grid(row=0, column=1, pady=2)
-
-        tk.Label(campos_factura_frame, text="Apellidos:", bg=estilos.FONDO).grid(row=1, column=0, sticky="w", pady=2)
-        txt_apellidos = tk.Entry(campos_factura_frame, width=30, state="disabled")
-        txt_apellidos.grid(row=1, column=1, pady=2)
-
-        tk.Label(campos_factura_frame, text="Correo:", bg=estilos.FONDO).grid(row=2, column=0, sticky="w", pady=2)
-        txt_correo = tk.Entry(campos_factura_frame, width=30, state="disabled")
-        txt_correo.grid(row=2, column=1, pady=2)
-
-        tk.Label(campos_factura_frame, text="RFC:", bg=estilos.FONDO).grid(row=3, column=0, sticky="w", pady=2)
-        txt_rfc = tk.Entry(campos_factura_frame, width=30, state="disabled")
-        txt_rfc.grid(row=3, column=1, pady=2)
-
-        def finalizar_cobro():
-            # Aquí mandas los datos recolectados al controlador
+        datos_factura = None
+        if self.quiere_facturar.get():
             datos_factura = {
-                "requiere": requiere_factura.get(),
-                "nombre": txt_nombre.get(),
-                "apellidos": txt_apellidos.get(),
-                "correo": txt_correo.get(),
-                "rfc": txt_rfc.get()
-            } if requiere_factura.get() else None
+                "requiere": True,
+                "nombre": self.entry_nombre.get(),
+                "correo": self.entry_correo.get(),
+                "rfc": self.entry_rfc.get()
+            }
+            # Validación rápida opcional por si dejan campos vacíos al requerir factura
+            if not datos_factura["nombre"] or not datos_factura["rfc"]:
+                messagebox.showwarning("Campos incompletos", "Por favor completa los datos de facturación obligatorios.")
+                return
 
-            # Envias tipo de pago y datos de factura a tu controlador
-            self.controlador.procesar_cobro_avanzado(tipo_pago.get(), datos_factura)
-            modal.destroy()
-            self.refrescar_pantalla()
+        # Mandamos los datos recolectados al controlador
+        if hasattr(self.controlador, "procesar_cobro_avanzado"):
+            self.controlador.procesar_cobro_avanzado(detalle_pago, datos_factura)
+        elif hasattr(self.controlador, "procesar_cobro"):
+            self.controlador.procesar_cobro(detalle_pago, datos_factura)
+        else:
+            messagebox.showinfo("Éxito", "Cobro registrado correctamente.")
 
-        tk.Button(modal, text="CONFIRMAR COBRO", bg="#F4D03F", font=("Arial", 10, "bold"), relief="flat", command=finalizar_cobro).pack(pady=20)
+        self.refrescar_pantalla()
 
     def dibujar_catalogo(self, productos_disponibles):
         for widget in self.frame_lista.winfo_children():
