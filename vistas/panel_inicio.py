@@ -16,20 +16,19 @@ class PanelInicio(tk.Frame):
         productos_bajo_stock = sorted(inventario, key=lambda p: p["stock"])[:2]
 
         def crear_tarjeta(titulo):
-            tarjeta_externa = tk.Frame(contenedor, bg="#D95A78", width=260, height=300)
-            tarjeta_externa.pack(side="left", fill="both", expand=True, padx=15)
-            tarjeta_externa.pack_propagate(False)
+            tarjeta_externa = tk.Frame(contenedor, bg="#D95A78")
+            tarjeta_externa.pack(side="left", fill="both", expand=True, padx=10)
 
             tarjeta = tk.Frame(tarjeta_externa, bg=estilos.BLANCO, bd=1, relief="solid")
-            tarjeta.pack(fill="both", expand=True, padx=(0, 8), pady=(0, 8))
+            tarjeta.pack(fill="both", expand=True, padx=4, pady=4)
 
-            encabezado = tk.Frame(tarjeta, bg="#F8F8F8", height=55)
+            encabezado = tk.Frame(tarjeta, bg="#F8F8F8", height=45)
             encabezado.pack(fill="x")
             encabezado.pack_propagate(False)
 
-            tk.Label(encabezado, text="●", fg="#F2C500", bg="#F8F8F8", font=("Arial", 12)).pack(side="left", padx=(12, 3))
+            tk.Label(encabezado, text="●", fg="#F2C500", bg="#F8F8F8", font=("Arial", 12)).pack(side="left", padx=(10, 2))
             tk.Label(encabezado, text="●", fg="#E78BA6", bg="#F8F8F8", font=("Arial", 12)).pack(side="left")
-            tk.Label(encabezado, text=titulo, bg="#F8F8F8", fg="#555555", font=("Arial", 10, "bold")).pack(side="left", padx=12)
+            tk.Label(encabezado, text=titulo, bg="#F8F8F8", fg="#555555", font=("Arial", 9, "bold")).pack(side="left", padx=10)
 
             return tarjeta
 
