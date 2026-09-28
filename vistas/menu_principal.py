@@ -4,6 +4,7 @@ from vistas.panel_inicio import PanelInicio
 from vistas.panel_ventas import PanelVentas
 from vistas.panel_inventario import PanelInventario
 from vistas.panel_apartados import PanelApartados
+from vistas.panel_historial import PanelHistorial
 from vistas.login import PantallaLogin
 
 
@@ -89,6 +90,10 @@ class MenuPrincipal(tk.Frame):
 
         elif opcion == "APARTADOS":
             panel = PanelApartados(self.contenido, self.controlador)
+            panel.pack(fill="both", expand=True)
+
+        elif opcion == "HISTORIAL":
+            panel = PanelHistorial(self.contenido, self.controlador)
             panel.pack(fill="both", expand=True)
    
         else:
