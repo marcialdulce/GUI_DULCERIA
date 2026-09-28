@@ -11,7 +11,7 @@ def generar_ticket_pdf(nombre_archivo, productos_comprados, total):
     c = canvas.Canvas(nombre_archivo, pagesize=letter)
     
     # Cabecera del ticket
-    c.drawString(100, 750, "=== DULCERÍA LA ESTRELLA ===")
+    c.drawString(100, 750, "=== DULCERÍA ===")
     c.drawString(100, 735, f"Fecha: {fecha_actual}")
     c.drawString(100, 720, "-" * 40)
     
