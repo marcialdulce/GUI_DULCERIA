@@ -43,12 +43,12 @@ class ControladorDulceria:
         total = self.modelo.calcular_total()
 
         if total == 0:
-            messagebox.showwarning("Aviso", "El ticket está vacío, mete algo antes de cobrar.")
+            messagebox.showwarning("Aviso", "El ticket está vacío.")
             return
 
-        # Checar que no nos manden la factura vacía
+        # Validar que la factura contenga los datos necesarios
         if requiere_factura and (rfc.strip() == "" or razon_social.strip() == ""):
-            messagebox.showerror("Error", "Faltan datos del cliente para armar la factura.")
+            messagebox.showerror("Error", "Faltan datos del cliente para la factura.")
             return
 
         # Respaldamos el carrito porque el modelo lo limpia al terminar el cobro
@@ -56,7 +56,7 @@ class ControladorDulceria:
 
         # Proceso de pago
         cambio = 0.0
-        pago = 0.0 # Iniciamos la variable para que no truene si pagan con tarjeta
+        pago = 0.0 
         
         if metodo_pago == "Efectivo":
             pago = simpledialog.askfloat("Cobrar Venta", f"Total a cobrar: ${total:.2f}\n¿Con cuánto pagó?")
@@ -69,10 +69,10 @@ class ControladorDulceria:
             exito, cambio = self.modelo.procesar_cobro(total)
 
         if not exito:
-            messagebox.showerror("Pago Insuficiente", "Le falta dinero, no acompleta.")
+            messagebox.showerror("Pago Insuficiente")
             return
 
-        # Vemos si quiere factura o ticket normal.
+        # Vemos si quiere factura o ticket normal
         if requiere_factura:
             self._generar_factura_pdf(rfc, razon_social, carrito_comprado, total, metodo_pago, pago, cambio)
         else:
@@ -80,7 +80,7 @@ class ControladorDulceria:
 
 
     def _generar_factura_pdf(self, rfc, razon_social, carrito_comprado, total, metodo_pago, pago, cambio):
-        # Esta función es puramente para armar el diseño de ReportLab
+        # Esta función es para el diseño de ReportLab
         try:
             if not os.path.exists("facturas"):
                 os.makedirs("facturas")
@@ -170,7 +170,7 @@ class ControladorDulceria:
             messagebox.showinfo("Éxito", f"Venta lista.\nCambio: ${cambio:.2f}\n\nSe guardó la {nombre_archivo}")
             
         except Exception as e:
-            messagebox.showerror("Error de PDF", f"Sí se cobró bien, pero tronó el PDF: {e}")
+            messagebox.showerror("Error de PDF", f"Sí se cobró bien, pero no funciona el PDF: {e}")
        
     def procesar_agregar(self, nombre_producto):
         cantidad = simpledialog.askinteger("Cantidad", f"¿Cuantos {nombre_producto} deseas agregar?")
