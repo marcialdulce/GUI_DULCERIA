@@ -10,18 +10,22 @@ class PanelHistorial(tk.Frame):
     self.controlador = controlador
     self.config(bg=getattr(estilos, "FONDO", "#FFF5F5"))
 
-    # Título de la sección
+    # Cabecera limpia y unificada (igual al estilo general)
+    frame_titulo = tk.Frame(self, bg="#3A8D96", height=40)
+    frame_titulo.pack(fill="x")
+    frame_titulo.pack_propagate(False)
+
     tk.Label(
-        self,
-        text="HISTORIAL DE VENTAS",
-        font=("Arial", 16, "bold"),
-        bg=getattr(estilos, "FONDO", "#FFF5F5"),
-        fg="#333333",
-    ).pack(pady=15)
+        frame_titulo,
+        text="  HISTORIAL DE VENTAS",
+        bg="#3A8D96",
+        fg="white",
+        font=("Arial", 11, "bold"),
+    ).pack(side="left", padx=10)
 
     # Barra superior de filtros
     frame_filtros = tk.Frame(self, bg=getattr(estilos, "FONDO", "#FFF5F5"))
-    frame_filtros.pack(fill="x", padx=20, pady=10)
+    frame_filtros.pack(fill="x", padx=20, pady=15)
 
     tk.Label(
         frame_filtros,
@@ -52,7 +56,7 @@ class PanelHistorial(tk.Frame):
       self.tabla_historial.heading(col, text=col)
       self.tabla_historial.column(col, width=140, anchor="center")
 
-    self.tabla_historial.pack(fill="both", expand=True, padx=20, pady=10)
+    self.tabla_historial.pack(fill="both", expand=True, padx=20, pady=5)
 
     # Resumen inferior
     frame_resumen = tk.Frame(self, bg=getattr(estilos, "FONDO", "#FFF5F5"))
@@ -69,5 +73,4 @@ class PanelHistorial(tk.Frame):
 
   def filtrar_ventas(self):
     fecha = self.entry_fecha.get()
-    # Aquí podrás conectar la búsqueda en tu modelo o base de datos más adelante
     messagebox.showinfo("Filtro", f"Buscando ventas del día: {fecha}")
