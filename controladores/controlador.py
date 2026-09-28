@@ -88,15 +88,14 @@ class ControladorDulceria:
         # Retorna el inventario, el carrito y el total
         return self.modelo.inventario, self.modelo.ticket_actual, total
 
-    def obtener_datos_agotados(self):
-        productos_filtrados = []
-        for producto in self.modelo.inventario:
-            stock = producto["stock"]
-            if stock < 15:
-                estado = "AGOTADO" if stock == 0 else "BAJO"
-                productos_filtrados.append((producto["nombre"], producto["marca"], stock, estado))
-        
-        return productos_filtrados
+    def solicitar_proveedor(self, nombre_producto, stock_actual):
+        # Aquí puedes programar la lógica de envío de correo, pedido simulado o registro en BD
+        respuesta = messagebox.askyesno(
+            "Pedido a Proveedor", 
+            f"¿Deseas enviar una orden de abastecimiento al proveedor para:\n\n• Producto: {nombre_producto}\n• Stock actual: {stock_actual} unidades?"
+        )
+        if respuesta:
+            messagebox.showinfo("Solicitud Exitosa", f"¡Pedido enviado al proveedor con éxito para el producto '{nombre_producto}'!")
 
     def cerrar_sesion(self):
          # Limpiamos el ticket temporal por seguridad para el siguiente usuario
