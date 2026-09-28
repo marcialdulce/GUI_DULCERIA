@@ -7,20 +7,29 @@ class PanelApartados(tk.Frame):
         super().__init__(parent, bg=estilos.FONDO)
         self.controlador = controlador
 
+        # ----------------------------------------------------
+        # 1. BARRA SUPERIOR (Se empaqueta PRIMERO para que quede arriba)
+        # ----------------------------------------------------
+        frame_titulo = tk.Frame(self, bg="#3A8D96", height=40)
+        frame_titulo.pack(fill="x", side="top")
+        frame_titulo.pack_propagate(False)
+
+        tk.Label(
+            frame_titulo,
+            text="  CONTROL DE APARTADOS",
+            bg="#3A8D96",
+            fg="white",
+            font=("Arial", 11, "bold"),
+        ).pack(side="left", padx=10)
+
+        # ----------------------------------------------------
+        # 2. PANEL PRINCIPAL (Para contener la tabla y sus márgenes)
+        # ----------------------------------------------------
         panel_principal = tk.Frame(self, bg=estilos.FONDO)
         panel_principal.pack(fill="both", expand=True, padx=20, pady=10)
 
         # ----------------------------------------------------
-        # BARRA SUPERIOR
-        # ----------------------------------------------------
-        barra_apartados = tk.Frame(panel_principal, bg="#3A8D96", height=40)
-        barra_apartados.pack(fill="x", pady=(0, 10))
-        barra_apartados.pack_propagate(False)
-
-        tk.Label(barra_apartados, text="APARTADOS", bg="#3A8D96", fg=estilos.BLANCO, font=("Arial", 9, "bold")).pack(side="left", padx=12)
-
-        # ----------------------------------------------------
-        # TABLA DE APARTADOS
+        # 3. TABLA DE APARTADOS
         # ----------------------------------------------------
         columnas = ("PRODUCTO", "NOMBRE", "FECHA DE ENTREGA", "PRECIO", "UNIDADES APARTADAS")
         self.tabla_apartados = ttk.Treeview(panel_principal, columns=columnas, show="headings", height=16)
