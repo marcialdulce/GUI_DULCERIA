@@ -56,7 +56,7 @@ class PanelVentas(tk.Frame):
 
         # --------------OPCIONES DE COBRO Y FACTURA-------------
         self.metodo_pago = tk.StringVar(value="Efectivo")
-        self.tipo_tarjeta = tk.StringVar(value="Credito")
+        self.tipo_tarjeta = tk.StringVar(value="Crédito")
         self.quiere_facturar = tk.BooleanVar(value=False)
 
         frame_opciones = tk.Frame(panel_der, bg="#F4F4F4")
@@ -84,23 +84,8 @@ class PanelVentas(tk.Frame):
         frame_radios_fac.pack(anchor="w")
         tk.Radiobutton(frame_radios_fac, text="No", variable=self.quiere_facturar, value=False, bg="#F4F4F4", command=self.toggle_datos_factura).pack(side="left")
         tk.Radiobutton(frame_radios_fac, text="Si", variable=self.quiere_facturar, value=True, bg="#F4F4F4", command=self.toggle_datos_factura).pack(side="left")
-        
-        # Formulario completo de factura (Oculto por defecto con Nombre, Correo y RFC)
-        self.frame_datos_factura = tk.Frame(frame_opciones, bg="#F4F4F4")
-        
-        tk.Label(self.frame_datos_factura, text="Nombre Completo:", bg="#F4F4F4").grid(row=0, column=0, sticky="e", pady=2)
-        self.entry_nombre = tk.Entry(self.frame_datos_factura, width=22)
-        self.entry_nombre.grid(row=0, column=1, pady=2, padx=5)
 
-        tk.Label(self.frame_datos_factura, text="Correo:", bg="#F4F4F4").grid(row=1, column=0, sticky="e", pady=2)
-        self.entry_correo = tk.Entry(self.frame_datos_factura, width=22)
-        self.entry_correo.grid(row=1, column=1, pady=2, padx=5)
-
-        tk.Label(self.frame_datos_factura, text="RFC:", bg="#F4F4F4").grid(row=2, column=0, sticky="e", pady=2)
-        self.entry_rfc = tk.Entry(self.frame_datos_factura, width=22)
-        self.entry_rfc.grid(row=2, column=1, pady=2, padx=5)
-
-        # BOTÓN DE COBRAR (Conectado a la función procesar_cobro_principal)
+        # BOTÓN DE COBRAR
         frame_botones = tk.Frame(panel_der, bg="#F4F4F4")
         frame_botones.pack(fill="x", padx=10, pady=10)
         tk.Button(frame_botones, text="COBRAR", bg="#F4D03F", font=("Arial", 10, "bold"), relief="flat", command=self.procesar_cobro_principal).pack(side="right", expand=True, fill="x", padx=5)
@@ -114,48 +99,114 @@ class PanelVentas(tk.Frame):
         else:
             self.frame_tipo_tarjeta.pack_forget()
 
-    # FUNCIÓN QUE MUESTRA O OCULTA LOS DATOS DE LA FACTURA
+    # FUNCIÓN QUE DETECTA CUANDO SE ELIGE FACTURAR PARA ABRIR LA VENTANA EMERGENTE
     def toggle_datos_factura(self):
         if self.quiere_facturar.get():
-            self.frame_datos_factura.pack(anchor="w", pady=5)
-        else:
-            self.frame_datos_factura.pack_forget()
-            self.entry_nombre.delete(0, tk.END)
-            self.entry_correo.delete(0, tk.END)
-            self.entry_rfc.delete(0, tk.END)
+            self.abrir_ventana_factura()
 
     def intentar_agregar(self, nombre_producto):
         self.controlador.procesar_agregar(nombre_producto)
         self.refrescar_pantalla()
 
+    # VENTANA EMERGENTE PARA CAPTURAR DATOS DE FACTURA Y MOSTRAR EL TOTAL
+    def abrir_ventana_factura(self):
+        modal_fac = tk.Toplevel(self)
+        modal_fac.title("Datos de Facturación")
+        modal_fac.geometry("380x320")
+        modal_fac.config(bg=estilos.FONDO)
+        modal_fac.grab_set()
+
+        # Obtener el total actual de la venta desde el controlador
+        _, _, total_actual = self.controlador.obtener_datos_ventas()
+
+        tk.Label(modal_fac, text="SOLICITUD DE FACTURA", bg=estilos.FONDO, font=("Arial", 11, "bold")).pack(pady=10)
+        tk.Label(modal_fac, text=f"Total a Facturar: ${total_actual:.2f}", bg=estilos.FONDO, fg="#3A8D96", font=("Arial", 10, "bold")).pack(pady=5)
+
+        frame_campos = tk.Frame(modal_fac, bg=estilos.FONDO)
+        frame_campos.pack(pady=10)
+
+        tk.Label(frame_campos, text="Nombre Completo:", bg=estilos.FONDO).grid(row=0, column=0, sticky="e", pady=5)
+        self.entry_nombre_fac = tk.Entry(frame_campos, width=22)
+        self.entry_nombre_fac.grid(row=0, column=1, pady=5, padx=5)
+
+        tk.Label(frame_campos, text="Correo:", bg=estilos.FONDO).grid(row=1, column=0, sticky="e", pady=5)
+        self.entry_correo_fac = tk.Entry(frame_campos, width=22)
+        self.entry_correo_fac.grid(row=1, column=1, pady=5, padx=5)
+
+        tk.Label(frame_campos, text="RFC:", bg=estilos.FONDO).grid(row=2, column=0, sticky="e", pady=5)
+        self.entry_rfc_fac = tk.Entry(frame_campos, width=22)
+        self.entry_rfc_fac.grid(row=2, column=1, pady=5, padx=5)
+
+        def guardar_y_cerrar():
+            if not self.entry_nombre_fac.get() or not self.entry_rfc_fac.get():
+                messagebox.showwarning("Campos vacíos", "Por favor ingresa al menos el Nombre y el RFC.", parent=modal_fac)
+                return
+            messagebox.showinfo("Éxito", "Datos de factura guardados correctamente.", parent=modal_fac)
+            modal_fac.destroy()
+
+        tk.Button(modal_fac, text="GUARDAR DATOS", bg="#F4D03F", font=("Arial", 9, "bold"), relief="flat", command=guardar_y_cerrar).pack(pady=15)
+        
+        # Si cierran la ventana de factura con la 'X', regresamos el radio button a "No"
+        def al_cerrar():
+            self.quiere_facturar.set(False)
+            modal_fac.destroy()
+        
+        modal_fac.protocol("WM_DELETE_WINDOW", al_cerrar)
+
     # FUNCIÓN QUE EJECUTA EL COBRO DESDE LA PANTALLA PRINCIPAL
     def procesar_cobro_principal(self):
         metodo = self.metodo_pago.get()
-        # Si pagó con tarjeta, podemos adjuntar si es crédito o débito (puedes estructurarlo como guste tu controlador)
         detalle_pago = f"{metodo} ({self.tipo_tarjeta.get()})" if metodo == "Tarjeta" else metodo
 
-        datos_factura = None
-        if self.quiere_facturar.get():
-            datos_factura = {
-                "requiere": True,
-                "nombre": self.entry_nombre.get(),
-                "correo": self.entry_correo.get(),
-                "rfc": self.entry_rfc.get()
-            }
-            # Validación rápida opcional por si dejan campos vacíos al requerir factura
-            if not datos_factura["nombre"] or not datos_factura["rfc"]:
-                messagebox.showwarning("Campos incompletos", "Por favor completa los datos de facturación obligatorios.")
-                return
+        # Validar si el carrito está vacío antes de cobrar (opcional pero recomendado)
+        _, carrito, _ = self.controlador.obtener_datos_ventas()
+        if not carrito:
+            messagebox.showwarning("Ticket Vacío", "No hay productos en el ticket para cobrar.")
+            return
 
-        # Mandamos los datos recolectados al controlador
-        if hasattr(self.controlador, "procesar_cobro_avanzado"):
-            self.controlador.procesar_cobro_avanzado(detalle_pago, datos_factura)
-        elif hasattr(self.controlador, "procesar_cobro"):
-            self.controlador.procesar_cobro(detalle_pago, datos_factura)
+        # Si el pago es con tarjeta, mostramos la ventana emergente de cobro realizado
+        if metodo == "Tarjeta":
+            modal_cobro = tk.Toplevel(self)
+            modal_cobro.title("Cobro con Tarjeta")
+            modal_cobro.geometry("300x180")
+            modal_cobro.config(bg=estilos.FONDO)
+            modal_cobro.grab_set()
+
+            tk.Label(modal_cobro, text="¡COBRO REALIZADO CON ÉXITO!", bg=estilos.FONDO, fg="green", font=("Arial", 10, "bold")).pack(pady=20)
+            tk.Label(modal_cobro, text=f"Método: {detalle_pago}", bg=estilos.FONDO, font=("Arial", 9)).pack(pady=5)
+
+            def aceptar_cobro():
+                # Mandar a limpiar o vaciar el ticket en el controlador
+                if hasattr(self.controlador, "limpiar_ticket"):
+                    self.controlador.limpiar_ticket()
+                elif hasattr(self.controlador, "procesar_cobro"):
+                    self.controlador.procesar_cobro(detalle_pago, None)
+                
+                modal_cobro.destroy()
+                self.quiere_facturar.set(False)
+                self.refrescar_pantalla()
+
+            tk.Button(modal_cobro, text="ACEPTAR", bg="#F4D03F", font=("Arial", 9, "bold"), relief="flat", command=aceptar_cobro).pack(pady=15)
         else:
-            messagebox.showinfo("Éxito", "Cobro registrado correctamente.")
+            # Flujo normal para efectivo u otros métodos
+            datos_factura = None
+            if self.quiere_facturar.get():
+                datos_factura = {
+                    "requiere": True,
+                    "nombre": getattr(self, "entry_nombre_fac", tk.Entry()).get(),
+                    "correo": getattr(self, "entry_correo_fac", tk.Entry()).get(),
+                    "rfc": getattr(self, "entry_rfc_fac", tk.Entry()).get()
+                }
 
-        self.refrescar_pantalla()
+            if hasattr(self.controlador, "procesar_cobro_avanzado"):
+                self.controlador.procesar_cobro_avanzado(detalle_pago, datos_factura)
+            elif hasattr(self.controlador, "procesar_cobro"):
+                self.controlador.procesar_cobro(detalle_pago, datos_factura)
+            else:
+                messagebox.showinfo("Éxito", "Cobro registrado correctamente.")
+            
+            self.quiere_facturar.set(False)
+            self.refrescar_pantalla()
 
     def dibujar_catalogo(self, productos_disponibles):
         for widget in self.frame_lista.winfo_children():
