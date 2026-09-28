@@ -4,7 +4,6 @@ from vistas.panel_inicio import PanelInicio
 from vistas.panel_ventas import PanelVentas
 from vistas.panel_inventario import PanelInventario
 from vistas.panel_apartados import PanelApartados
-from vistas.panel_agotados import PanelAgotados
 from vistas.login import PantallaLogin
 
 
@@ -42,7 +41,7 @@ class MenuPrincipal(tk.Frame):
         menu.pack(fill="x")
         menu.pack_propagate(False)
 
-        opciones = ["INICIO", "NUEVA VENTA", "INVENTARIO", "AGOTADOS", "APARTADOS", "HISTORIAL"]
+        opciones = ["INICIO", "NUEVA VENTA", "INVENTARIO", "APARTADOS", "HISTORIAL"]
         self.botones_menu = {}
 
         for opcion in opciones:
@@ -91,10 +90,6 @@ class MenuPrincipal(tk.Frame):
         elif opcion == "APARTADOS":
             panel = PanelApartados(self.contenido, self.controlador)
             panel.pack(fill="both", expand=True)
-
-        elif opcion == "AGOTADOS":
-            panel = PanelAgotados(self.contenido, self.controlador)
-            panel.pack(fill="both", expand=True)
-            
+   
         else:
             tk.Label(self.contenido, text=f"Pantalla de {opcion}\n(Pendiente...)", font=("Arial", 22, "bold"), bg=estilos.FONDO, fg="#333333").pack(pady=150)
