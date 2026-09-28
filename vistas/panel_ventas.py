@@ -56,7 +56,7 @@ class PanelVentas(tk.Frame):
 
         # --------------OPCIONES DE COBRO Y FACTURA-------------
         self.metodo_pago = tk.StringVar(value="Efectivo")
-        self.tipo_tarjeta = tk.StringVar(value="Crédito")
+        self.tipo_tarjeta = tk.StringVar(value="Credito")
         self.quiere_facturar = tk.BooleanVar(value=False)
 
         frame_opciones = tk.Frame(panel_der, bg="#F4F4F4")
