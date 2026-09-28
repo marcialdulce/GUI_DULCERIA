@@ -9,10 +9,15 @@ class VistaDulceria(tk.Tk):
         super().__init__()
         self.controlador = controlador
         self.title("Dulcería")
-        self.geometry("1000x650")
-        self.resizable(False, False)
+
+        # CONFIGURACIÓN DE PANTALLA COMPLETA
+        self.attributes('-fullscreen', True)  # Activa la pantalla completa
         self.configure(bg=estilos.FONDO)
 
+        # Evento para salir de pantalla completa presionando la tecla Escape (ESC)
+        self.bind("<Escape>", self.salir_pantalla_completa)
+        self.bind("<F11>", self.alternar_pantalla_completa) # Opcional: F11 para alternar
+        
         self.contenedor = tk.Frame(self, bg=estilos.FONDO)
         self.contenedor.pack(fill="both", expand=True)
         self.contenedor.grid_rowconfigure(0, weight=1)
@@ -35,3 +40,11 @@ class VistaDulceria(tk.Tk):
             messagebox.showinfo(titulo, mensaje)
         else:
             messagebox.showerror(titulo, mensaje)
+
+    # Métodos auxiliares para controlar la pantalla completa
+    def salir_pantalla_completa(self, event=None):
+        self.attributes('-fullscreen', False)
+
+    def alternar_pantalla_completa(self, event=None):
+        estado_actual = self.attributes('-fullscreen')
+        self.attributes('-fullscreen', not estado_actual)

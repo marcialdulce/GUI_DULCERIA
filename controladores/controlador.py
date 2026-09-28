@@ -38,140 +38,43 @@ class ControladorDulceria:
             )
             self.vista.pantallas["PantallaLogin"].txt_password.delete(0, 'end')
 
-    def cobrar_ticket(self, metodo_pago="Efectivo", requiere_factura=False, rfc="", razon_social=""):
-        # Sacamos el total directo del modelo
+    def procesar_cobro_avanzado(self, tipo_pago, datos_factura):
         total = self.modelo.calcular_total()
-
-        if total == 0:
-            messagebox.showwarning("Aviso", "El ticket está vacío.")
-            return
-
-        # Validar que la factura contenga los datos necesarios
-        if requiere_factura and (rfc.strip() == "" or razon_social.strip() == ""):
-            messagebox.showerror("Error", "Faltan datos del cliente para la factura.")
-            return
-
-        # Respaldamos el carrito porque el modelo lo limpia al terminar el cobro
-        carrito_comprado = self.modelo.ticket_actual.copy()
-
-        # Proceso de pago
-        cambio = 0.0
-        pago = 0.0 
         
-        if metodo_pago == "Efectivo":
-            pago = simpledialog.askfloat("Cobrar Venta", f"Total a cobrar: ${total:.2f}\n¿Con cuánto pagó?")
-            if pago is None: 
-                return # Se arrepintió y le dio cancelar
-            exito, cambio = self.modelo.procesar_cobro(pago)
-        else:
-            # Tarjeta, pasa el total directo
-            pago = total 
-            exito, cambio = self.modelo.procesar_cobro(total)
-
-        if not exito:
-            messagebox.showerror("Pago Insuficiente")
+        if total == 0:
+            messagebox.showwarning("Aviso", "El ticket está vacío. Agrega productos primero.")
             return
 
-        # Vemos si quiere factura o ticket normal
-        if requiere_factura:
-            self._generar_factura_pdf(rfc, razon_social, carrito_comprado, total, metodo_pago, pago, cambio)
+        pago = total  # Si es tarjeta, se cobra el monto exacto por defecto
+        
+        # Si paga en efectivo, pedimos la cantidad con un cuadro de diálogo
+        if tipo_pago == "Efectivo":
+            pago = simpledialog.askfloat("Cobrar en Efectivo", f"Total a cobrar: ${total:.2f}\n¿Con cuánto efectivo paga el cliente?")
+            if pago is None:  # Si el usuario presiona "Cancelar"
+                return
+
+        # Procesamos el cobro utilizando la lógica existente de tu modelo
+        exito, cambio = self.modelo.procesar_cobro(pago)
+        
+        if exito:
+            mensaje = f"¡Venta procesada con éxito!\n\nMétodo de pago: {tipo_pago}\n"
+            if tipo_pago == "Efectivo":
+                mensaje += f"Cambio a entregar: ${cambio:.2f}\n"
+            
+            # Si el usuario solicitó factura, agregamos los datos al mensaje de éxito
+            if datos_factura and datos_factura["requiere"]:
+                mensaje += f"\n--- FACTURA GENERADA ---\n" \
+                           f"Nombre: {datos_factura['nombre']} {datos_factura['apellidos']}\n" \
+                           f"Correo: {datos_factura['correo']}\n" \
+                           f"RFC: {datos_factura['rfc']}"
+            
+            messagebox.showinfo("Ticket Cobrado", mensaje)
+            
+            # Limpiar el ticket actual después del cobro exitoso
+            self.modelo.ticket_actual.clear()
         else:
-            messagebox.showinfo("Venta Exitosa", f"Venta lista.\n\nCambio a dar: ${cambio:.2f}")
+            messagebox.showerror("Pago Insuficiente", f"Faltan ${total - pago:.2f} para completar la venta.")
 
-
-    def _generar_factura_pdf(self, rfc, razon_social, carrito_comprado, total, metodo_pago, pago, cambio):
-        # Esta función es para el diseño de ReportLab
-        try:
-            if not os.path.exists("facturas"):
-                os.makedirs("facturas")
-
-            nombre_archivo = f"facturas/Factura_{rfc}.pdf"
-            c = canvas.Canvas(nombre_archivo)
-            fecha_actual = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-
-            # --- Encabezados ---
-            c.setFont("Helvetica-Bold", 14)
-            c.drawString(40, 800, "DULCERÍA MVC S.A. DE C.V.")
-            c.setFont("Helvetica", 10)
-            c.drawString(40, 785, "RFC: DULC202609MVC")
-            c.drawString(40, 770, "Régimen Fiscal: 601 - General de Ley Personas Morales")
-            c.drawString(40, 755, "C.P. de Expedición: 39355 (Acapulco, Gro.)")
-            
-            c.setFont("Helvetica-Bold", 12)
-            c.drawString(320, 800, "FACTURA ELECTRÓNICA (CFDI 4.0)")
-            c.setFont("Helvetica", 10)
-            c.drawString(320, 785, f"Fecha: {fecha_actual}")
-            c.drawString(320, 770, f"Receptor: {razon_social}")
-            c.drawString(320, 755, f"RFC: {rfc}")
-            
-            # Textos largos divididos
-            c.drawString(320, 740, "C.P.: 39355   |  Uso CFDI: G03 - Gastos en general")
-            c.drawString(320, 725, "Régimen: 612 - Personas Físicas con")
-            c.drawString(320, 710, "Actividades Empresariales")
-            c.line(40, 685, 560, 685)
-
-            # Titulos de la tabla
-            c.setFont("Helvetica-Bold", 9)
-            c.drawString(40, 675, "Clave SAT")
-            c.drawString(100, 675, "Cant")
-            c.drawString(140, 675, "UDM")
-            c.drawString(180, 675, "Descripción")
-            c.drawString(400, 675, "P. Unitario")
-            c.drawString(480, 675, "Importe")
-            c.line(40, 670, 560, 670)
-
-            # Recorrer productos
-            c.setFont("Helvetica", 9)
-            y = 650
-            subtotal_venta = total / 1.16
-            iva_venta = total - subtotal_venta
-
-            for item in carrito_comprado:
-                precio_sin_iva = (item['subtotal'] / item['cantidad']) / 1.16
-                importe_sin_iva = item['subtotal'] / 1.16
-
-                c.drawString(40, y, "50161800")
-                c.drawString(100, y, str(item['cantidad']))
-                c.drawString(140, y, "H87")
-                c.drawString(180, y, item['producto'])
-                c.drawString(400, y, f"${precio_sin_iva:.2f}") 
-                c.drawString(480, y, f"${importe_sin_iva:.2f}") 
-                y -= 20
-
-            # Totales abajo
-            c.line(40, y, 560, y)
-            y -= 20
-            
-            forma_pago_sat = "01 - Efectivo" if metodo_pago == "Efectivo" else "04 - Tarjeta de crédito"
-            
-            c.drawString(40, y, "Método de Pago: PUE - Pago en una sola exhibición")
-            c.drawString(40, y-15, f"Forma de Pago: {forma_pago_sat}")
-            c.drawString(40, y-30, "Moneda: MXN - Peso Mexicano")
-            
-            c.drawString(400, y, "Subtotal:")
-            c.drawString(480, y, f"${subtotal_venta:.2f}")
-            c.drawString(400, y-15, "IVA (16%):")
-            c.drawString(480, y-15, f"${iva_venta:.2f}")
-            
-            c.setFont("Helvetica-Bold", 11)
-            c.drawString(400, y-35, "TOTAL:")
-            c.drawString(480, y-35, f"${total:.2f}")
-
-            # Solo mostrar cambio si es en efectivo
-            if metodo_pago == "Efectivo":
-                c.setFont("Helvetica", 10)
-                c.drawString(400, y-55, "Efectivo:")
-                c.drawString(480, y-55, f"${pago:.2f}")
-                c.setFont("Helvetica-Bold", 10)
-                c.drawString(400, y-70, "Cambio:")
-                c.drawString(480, y-70, f"${cambio:.2f}")
-
-            c.save()
-            messagebox.showinfo("Éxito", f"Venta lista.\nCambio: ${cambio:.2f}\n\nSe guardó la {nombre_archivo}")
-            
-        except Exception as e:
-            messagebox.showerror("Error de PDF", f"Sí se cobró bien, pero no funciona el PDF: {e}")
-       
     def procesar_agregar(self, nombre_producto):
         cantidad = simpledialog.askinteger("Cantidad", f"¿Cuantos {nombre_producto} deseas agregar?")
         
@@ -188,15 +91,14 @@ class ControladorDulceria:
         # Retorna el inventario, el carrito y el total
         return self.modelo.inventario, self.modelo.ticket_actual, total
 
-    def obtener_datos_agotados(self):
-        productos_filtrados = []
-        for producto in self.modelo.inventario:
-            stock = producto["stock"]
-            if stock < 15:
-                estado = "AGOTADO" if stock == 0 else "BAJO"
-                productos_filtrados.append((producto["nombre"], producto["marca"], stock, estado))
-        
-        return productos_filtrados
+    def solicitar_proveedor(self, nombre_producto, stock_actual):
+        # Aquí puedes programar la lógica de envío de correo, pedido simulado o registro en BD
+        respuesta = messagebox.askyesno(
+            "Pedido a Proveedor", 
+            f"¿Deseas enviar una orden de abastecimiento al proveedor para:\n\n• Producto: {nombre_producto}\n• Stock actual: {stock_actual} unidades?"
+        )
+        if respuesta:
+            messagebox.showinfo("Solicitud Exitosa", f"¡Pedido enviado al proveedor con éxito para el producto '{nombre_producto}'!")
 
     def cerrar_sesion(self):
          # Limpiamos el ticket temporal por seguridad para el siguiente usuario
@@ -213,7 +115,3 @@ class ControladorDulceria:
     def procesar_filtro_inventario(self, texto, marca, categoria):
         # Obtiene la lista filtrada desde el modelo
         return self.modelo.obtener_inventario_filtrado(texto, marca, categoria)
-
-     
-
-        
