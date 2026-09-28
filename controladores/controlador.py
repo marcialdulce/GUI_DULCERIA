@@ -1,5 +1,8 @@
 import tkinter as tk
+import os
 from tkinter import messagebox, simpledialog
+from datetime import datetime
+from reportlab.pdfgen import canvas
 from modelos.modelo import ModeloDulceria
 from vistas.ventana_principal import VistaDulceria
 
@@ -67,7 +70,7 @@ class ControladorDulceria:
             
             messagebox.showinfo("Ticket Cobrado", mensaje)
             
-            # Opcional: limpiar el ticket actual si tu modelo no lo hace automáticamente al cobrar
+            # Limpiar el ticket actual después del cobro exitoso
             self.modelo.ticket_actual.clear()
         else:
             messagebox.showerror("Pago Insuficiente", f"Faltan ${total - pago:.2f} para completar la venta.")
@@ -112,7 +115,3 @@ class ControladorDulceria:
     def procesar_filtro_inventario(self, texto, marca, categoria):
         # Obtiene la lista filtrada desde el modelo
         return self.modelo.obtener_inventario_filtrado(texto, marca, categoria)
-
-     
-
-        

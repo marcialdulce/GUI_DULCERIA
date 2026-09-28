@@ -38,7 +38,7 @@ class PanelVentas(tk.Frame):
         tk.Label(panel_der, text="TICKET DE VENTA", bg="#F4F4F4", font=("Arial", 10, "bold")).pack(pady=10)
 
         columnas = ("PRODUCTO", "CANTIDAD", "PRECIO")
-        self.tabla_ticket = ttk.Treeview(panel_der, columns=columnas, show="headings", height=12)
+        self.tabla_ticket = ttk.Treeview(panel_der, columns=columnas, show="headings", height=6)
 
         for col in columnas:
             self.tabla_ticket.heading(col, text=col)
@@ -55,11 +55,58 @@ class PanelVentas(tk.Frame):
         self.label_total = tk.Label(frame_total, text="$0.00", bg="#F4F4F4", font=("Arial", 12, "bold"))
         self.label_total.pack(side="right")
 
+        # --------------OPCIONES DE COBRO Y FACTURA-------------
+
+        self.metodo_pago = tk.StringVar(value="Efectivo")
+        self.quiere_facturar = tk.BooleanVar(value=False)
+
+        frame_opciones = tk.Frame(panel_der, bg="#F4F4F4")
+        frame_opciones.pack(fill="x", padx=20, pady=5)
+
+        # Meptodos de pago
+        tk.Label(frame_opciones, text="Método de pago:", bg="#F4F4F4", font=("Arial", 9, "bold")).pack(anchor="w")
+        frame_radios = tk.Frame(frame_opciones, bg="#F4F4F4")
+        frame_radios.pack(anchor="w", pady=2)
+        tk.Radiobutton(frame_radios, text="Efectivo", variable=self.metodo_pago, value="Efectivo", bg="#F4F4F4").pack(side="left")
+        tk.Radiobutton(frame_radios, text="Tarjeta", variable=self.metodo_pago, value="Tarjeta", bg="#F4F4F4").pack(side="left")
+
+        # Opción si el cliente desea facturar
+        tk.Label(frame_opciones, text="¿El cliente requiere Factura?", bg="#F4F4F4", font=("Arial", 9, "bold")).pack(anchor="w", pady=(5,0))
+
+        frame_radios_fac = tk.Frame(frame_opciones, bg="#F4F4F4")
+        frame_radios_fac.pack(anchor="w")
+        tk.Radiobutton(frame_radios_fac, text="No", variable= self.quiere_facturar, value=False, bg="#F4F4F4", command=self.toogle_datos_factura).pack(side="left")
+        tk.Radiobutton(frame_radios_fac, text="Si", variable= self.quiere_facturar, value=True, bg="#F4F4F4", command=self.toogle_datos_factura).pack(side="left")
+        
+        # Formulario oculto de factura
+        self.frame_datos_factura = tk.Frame(frame_opciones, bg="#F4F4F4")
+        tk.Label(self.frame_datos_factura, text="RFC:", bg="#F4F4F4").grid(row=0, column=0, sticky="e", pady=2)
+        self.entry_rfc = tk.Entry(self.frame_datos_factura, width=22)
+        self.entry_rfc.grid(row=0, column=1, pady=2, padx=5)
+
+        tk.Label(self.frame_datos_factura, text="Razón Social:", bg="#F4F4F4").grid(row=1, column=0, sticky="e", pady=2)
+        self.entry_nombre = tk.Entry(self.frame_datos_factura, width=22)
+        self.entry_nombre.grid(row=1, column=1, pady=2, padx=5)
+
+
+
+        # BOTÓN DE COBRAR
         frame_botones = tk.Frame(panel_der, bg="#F4F4F4")
         frame_botones.pack(fill="x", padx=10, pady=10)
         tk.Button(frame_botones, text="COBRAR", bg="#F4D03F", font=("Arial", 10, "bold"), relief="flat", command=self.abrir_ventana_cobro).pack(side="right", expand=True, fill="x", padx=5)
         
         self.refrescar_pantalla()
+
+        # FUNCIÓN QUE MUESTRA O OCULTA LOS DATOS DE LA FACTURA
+    def toogle_datos_factura(self):
+        if self.quiere_facturar.get():
+            self.frame_datos_factura.pack(anchor="w")
+
+        else:
+            self.frame_datos_factura.pack_forget()
+            self.entry_rfc.delete(0, tk.END)
+            self.entry_nombre.delete(0, tk.END)
+
 
     def intentar_agregar(self, nombre_producto):
         # Llamamos al método original de tu controlador que ya funcionaba

@@ -70,7 +70,6 @@ class PanelInventario(tk.Frame):
         for prod in datos_procesados:
             stock = prod["stock"]
             
-            # Determinamos el estado y la etiqueta de acción según las reglas de stock
             if stock == 0:
                 estado = "AGOTADO"
                 tag = "agotado"
@@ -84,7 +83,8 @@ class PanelInventario(tk.Frame):
                 tag = "optimo"
                 accion = "---"
 
-            item_id = self.tabla_inv.insert("", "end", values=(
+            # AQUÍ QUITAMOS "item_id =" PARA QUE NO MARQUE LA ADVERTENCIA
+            self.tabla_inv.insert("", "end", values=(
                 prod["nombre"], prod["marca"], prod["categoria"],
                 f"${prod['precio']:.2f}", stock, estado, accion
             ), tags=(tag,))
