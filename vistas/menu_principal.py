@@ -6,6 +6,7 @@ from vistas.panel_inventario import PanelInventario
 from vistas.panel_apartados import PanelApartados
 from vistas.panel_historial import PanelHistorial
 from vistas.login import PantallaLogin
+from vistas.header import LogoDulceriaHeader
 
 
 class MenuPrincipal(tk.Frame):
@@ -14,29 +15,19 @@ class MenuPrincipal(tk.Frame):
         self.controlador = controlador
 
         # ====================================================
-        # ENCABEZADO SUPERIOR
+        # ENCABEZADO SUPERIOR UNIFICADO
         # ====================================================
-        encabezado = tk.Frame(self, bg=estilos.ROSA_CLARO, height=115)
-        encabezado.pack(fill="x")
-        encabezado.pack_propagate(False)
-
-        tk.Label(encabezado, text="🍬", font=("Segoe UI Emoji", 40), bg=estilos.ROSA_CLARO).place(x=45, y=25)
-        
-        btn_logout = tk.Button(encabezado, text="Cerrar Sesión", bg="#D9534F", fg=estilos.BLANCO, font=("Arial", 8, "bold"), activebackground="#C9302C", activeforeground=estilos.BLANCO, relief="flat", cursor="hand2", command=self.controlador.cerrar_sesion)
-        btn_logout.place(relx=0.82, y=88, anchor="center")
-        
-        tk.Label(encabezado, text="Dulcería", font=("Segoe Script", 25), bg=estilos.ROSA_CLARO, fg=estilos.NEGRO).place(x=115, y=33)
-
-        self.lbl_usuario = tk.Label(encabezado, text="", font=("Arial", 10, "bold"), bg=estilos.ROSA_CLARO, fg=estilos.NEGRO)
-        self.lbl_usuario.place(relx=0.91, y=88, anchor="center")
-
-        icono = tk.Canvas(encabezado, width=55, height=65, bg=estilos.ROSA_CLARO, highlightthickness=0)
-        icono.place(relx=0.94, y=15)
-        icono.create_oval(14, 2, 38, 26, fill=estilos.NEGRO, outline=estilos.NEGRO)
-        icono.create_arc(5, 28, 48, 66, start=0, extent=180, fill=estilos.NEGRO, outline=estilos.NEGRO)
+        self.header = LogoDulceriaHeader(
+            parent=self,
+            usuario_activo="Usuario",
+            comando_logout=self.controlador.cerrar_sesion,
+            logo_path="assets/logo_dulce.jpg",
+            user_icon_path="assets/user_icon.png"
+        )
+        self.header.pack(fill="x")
 
         # ====================================================
-        # MENU DE NAVEGACION (BOTONES LATERALES/SUPERIORES)
+        # MENU DE NAVEGACION (BOTONES SUPERIORES)
         # ====================================================
         menu = tk.Frame(self, bg=estilos.ROSA_MENU, height=42)
         menu.pack(fill="x")
@@ -46,7 +37,12 @@ class MenuPrincipal(tk.Frame):
         self.botones_menu = {}
 
         for opcion in opciones:
-            boton = tk.Button(menu, text=opcion, bg=estilos.ROSA_MENU, fg=estilos.BLANCO, activebackground=estilos.ROSA_MENU_ACTIVO, activeforeground=estilos.BLANCO, bd=0, relief="flat", font=("Arial", 9, "bold"), cursor="hand2", command=lambda op=opcion: self.mostrar_seccion(op))
+            boton = tk.Button(
+                menu, text=opcion, bg=estilos.ROSA_MENU, fg=estilos.BLANCO, 
+                activebackground=estilos.ROSA_MENU_ACTIVO, activeforeground=estilos.BLANCO, 
+                bd=0, relief="flat", font=("Arial", 9, "bold"), cursor="hand2", 
+                command=lambda op=opcion: self.mostrar_seccion(op)
+            )
             boton.pack(side="left", fill="both", expand=True)
             self.botones_menu[opcion] = boton
 
@@ -59,9 +55,9 @@ class MenuPrincipal(tk.Frame):
         # Iniciar por defecto en la primera pantalla
         self.mostrar_seccion("INICIO")
 
-
     def actualizar_usuario(self, usuario):
-        self.lbl_usuario.config(text=usuario)
+        """Actualiza el nombre del usuario en el header reutilizable"""
+        self.header.actualizar_usuario(usuario)
 
     def mostrar_seccion(self, opcion):
         # 1. Colorear el boton activo
@@ -97,4 +93,7 @@ class MenuPrincipal(tk.Frame):
             panel.pack(fill="both", expand=True)
    
         else:
-            tk.Label(self.contenido, text=f"Pantalla de {opcion}\n(Pendiente...)", font=("Arial", 22, "bold"), bg=estilos.FONDO, fg="#333333").pack(pady=150)
+            tk.Label(
+                self.contenido, text=f"Pantalla de {opcion}\n(Pendiente...)", 
+                font=("Arial", 22, "bold"), bg=estilos.FONDO, fg="#333333"
+            ).pack(pady=150)
