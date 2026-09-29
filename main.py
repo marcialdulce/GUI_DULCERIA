@@ -12,6 +12,3 @@ if __name__ == "__main__":
     app = VistaDulceria(ctrl)
     ctrl.vista = app
     app.mainloop()
-
-
-    

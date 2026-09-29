@@ -77,7 +77,7 @@ class ModeloDulceria:
                     if dulce["nombre"] == item_ticket["producto"]:
                         dulce["stock"] -= item_ticket["cantidad"]
                         
-                 self.ticket_actual.clear() # Vaciamos la lista temporal
+                self.ticket_actual.clear() # Vaciamos la lista temporal
                 return True, cambio
             return False, 0.0
 
