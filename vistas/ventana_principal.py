@@ -1,12 +1,14 @@
 import tkinter as tk
 from tkinter import messagebox
+import ttkbootstrap as ttk  # <-- 1. Importamos ttkbootstrap
 from vistas import estilos
 from vistas.login import PantallaLogin
 from vistas.menu_principal import MenuPrincipal
 
-class VistaDulceria(tk.Tk):
+class VistaDulceria(ttk.Window): # <-- 2. Heredamos de ttk.Window en lugar de tk.Tk
     def __init__(self, controlador):
-        super().__init__()
+        # 3. Inicializamos el tema moderno (puedes probar con 'flatly', 'cosmo', 'journal', etc.)
+        super().__init__(themename="flatly") 
         self.controlador = controlador
         self.title("Dulcería")
 
