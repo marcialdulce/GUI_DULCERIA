@@ -23,8 +23,16 @@ class ModeloDulceria:
             {"nombre": "Gomitas", "marca": "Ricolino", "categoria": "Gomitas", "precio": 15.0, "stock": 20},
             {"nombre": "Chocolate", "marca": "Carlos V", "categoria": "Chocolates", "precio": 12.0, "stock": 15},
             {"nombre": "Pap's",  "marca": "Totis", "categoria": "Frituras", "precio": 4.0, "stock": 50},
-            {"nombre": "Panditas",  "marca": "Ricolino", "categoria": "Gomitas", "precio": 20.0, "stock": 10}
+            {"nombre": "Panditas",  "marca": "Ricolino", "categoria": "Gomitas", "precio": 20.0, "stock": 10},
+            {"nombre": "Kranky", "marca": "Ricolino", "categoria": "Chocolates", "precio": 14.0, "stock": 25},
+            {"nombre": "Bubulubu", "marca": "Ricolino", "categoria": "Chocolates", "precio": 16.0, "stock": 30},
+            {"nombre": "Carlos V Blanco", "marca": "Carlos V", "categoria": "Chocolates", "precio": 13.0, "stock": 20},
+            {"nombre": "Moritas", "marca": "Ricolino", "categoria": "Gomitas", "precio": 12.0, "stock": 40},
+            {"nombre": "Mangomitas", "marca": "Ricolino", "categoria": "Gomitas", "precio": 15.0, "stock": 35},
+            {"nombre": "Donitas Sal y Limón", "marca": "Totis", "categoria": "Frituras", "precio": 6.0, "stock": 60},
+            {"nombre": "Donitas Picantes", "marca": "Totis", "categoria": "Frituras", "precio": 5.0, "stock": 55}
         ]
+        
 
         # Validación de los usuarios dentro del sistema
         def validar_usuario (self, usuario, password):

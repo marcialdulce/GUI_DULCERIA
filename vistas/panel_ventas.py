@@ -25,8 +25,29 @@ class PanelVentas(tk.Frame):
         self.txt_buscar_venta = tk.Entry(barra_busqueda, width=20)
         self.txt_buscar_venta.pack(side="right", padx=10, pady=8)
 
-        self.frame_lista = tk.Frame(panel_izq, bg="#EAEAEA")
-        self.frame_lista.pack(fill="both", expand=True)
+        self.canvas_productos = tk.Canvas(panel_izq, bg="#EAEAEA", highlightthickness=0)
+        self.scrollbar = ttk.Scrollbar(panel_izq, orient="vertical", command=self.canvas_productos.yview)
+        self.canvas_productos.configure(yscrollcommand=self.scrollbar.set)
+
+        self.scrollbar.pack(side="right", fill="y")
+        self.canvas_productos.pack(side="left", fill="both", expand=True)
+
+        self.frame_lista = tk.Frame(self.canvas_productos, bg="#EAEAEA")
+        
+        # Insertar el Frame interior dentro del Canvas
+        self.canvas_window = self.canvas_productos.create_window((0, 0), window=self.frame_lista, anchor="nw")
+
+        # Configurar los eventos para que el scroll crezca automáticamente según la cantidad de dulces
+        self.frame_lista.bind(
+            "<Configure>",
+            lambda e: self.canvas_productos.configure(scrollregion=self.canvas_productos.bbox("all"))
+        )
+        
+        # 6. Forzar que los dulces ocupen todo el ancho disponible del panel izquierdo
+        self.canvas_productos.bind(
+            "<Configure>",
+            lambda e: self.canvas_productos.itemconfig(self.canvas_window, width=e.width)
+        )
 
         # ====================================================
         # PANEL DERECHO (Ticket de Venta)
