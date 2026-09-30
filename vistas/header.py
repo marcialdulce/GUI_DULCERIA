@@ -105,7 +105,7 @@ class LogoDulceriaHeader(tk.Frame):
         """Actualiza la fecha y la hora combinadas con emojis cada segundo."""
         ahora = datetime.now()
         # Formato limpio con emojis de calendario y reloj
-        tiempo_formateado = ahora.strftime("📅 %d/%m/%Y   ⏰ %H:%M:%S")
+        tiempo_formateado = f"📅 {ahora.strftime('%d/%m/%Y')}   ⏰ {ahora.strftime('%H:%M:%S')}"
         
         if hasattr(self, 'lbl_reloj'):
             self.lbl_reloj.config(text=tiempo_formateado)
