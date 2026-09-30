@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from vistas import estilos
 
+CREDITO = "Crédito"
+
 class PanelVentas(tk.Frame):
     def __init__(self, parent, controlador):
         super().__init__(parent, bg=estilos.FONDO)
@@ -88,14 +90,14 @@ class PanelVentas(tk.Frame):
         frame_radios = tk.Frame(frame_opciones, bg="#F4F4F4")
         frame_radios.pack(anchor="w", pady=2)
         
-        tk.Radiobutton(frame_radios, text="Efectivo", variable=self.metodo_pago, value="Efectivo", 
+        tk.Radiobutton(frame_radios, text="Efectivo", variable=self.metodo_pago, value="Efectivo",
                        bg="#F4F4F4", command=self.toggle_metodo_pago).pack(side="left")
         tk.Radiobutton(frame_radios, text="Tarjeta", variable=self.metodo_pago, value="Tarjeta", 
                        bg="#F4F4F4", command=self.toggle_metodo_pago).pack(side="left")
 
         # Sub-opciones de Tarjeta (Crédito / Débito) - Ocultas por defecto
         self.frame_tipo_tarjeta = tk.Frame(frame_opciones, bg="#F4F4F4")
-        tk.Radiobutton(self.frame_tipo_tarjeta, text="Crédito", variable=self.tipo_tarjeta, value="Crédito", bg="#F4F4F4").pack(side="left", padx=(0, 10))
+        tk.Radiobutton(self.frame_tipo_tarjeta, text=CREDITO, variable=self.tipo_tarjeta, value=CREDITO, bg="#F4F4F4").pack(side="left", padx=(0, 10))
         tk.Radiobutton(self.frame_tipo_tarjeta, text="Débito", variable=self.tipo_tarjeta, value="Débito", bg="#F4F4F4").pack(side="left")
 
         # Opción si el cliente desea facturar
