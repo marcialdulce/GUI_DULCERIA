@@ -35,7 +35,7 @@ class PanelVentas(tk.Frame):
         self.canvas_productos.pack(side="left", fill="both", expand=True)
 
         self.frame_lista = tk.Frame(self.canvas_productos, bg="#EAEAEA")
-        
+
         # Insertar el Frame interior dentro del Canvas
         self.canvas_window = self.canvas_productos.create_window((0, 0), window=self.frame_lista, anchor="nw")
 
@@ -50,6 +50,8 @@ class PanelVentas(tk.Frame):
             "<Configure>",
             lambda e: self.canvas_productos.itemconfig(self.canvas_window, width=e.width)
         )
+        
+        self.canvas_productos.bind_all("<MouseWheel>", self._on_mousewheel)
 
         # ====================================================
         # PANEL DERECHO (Ticket de Venta)
@@ -267,3 +269,7 @@ class PanelVentas(tk.Frame):
         productos, carrito, total = self.controlador.obtener_datos_ventas()
         self.dibujar_catalogo(productos)
         self.dibujar_ticket(carrito, total)
+
+    def _on_mousewheel(self, event):
+        # event.delta captura la velocidad física. Dividimos entre 120 (estándar de Windows)
+        self.canvas_productos.yview_scroll(int(-1 * (event.delta / 120)), "units")
