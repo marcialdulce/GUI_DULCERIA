@@ -6,7 +6,7 @@ from datetime import datetime
 class LogoDulceriaHeader(tk.Frame):
     """
     Componente reutilizable de interfaz gráfica para el encabezado principal de la dulcería.
-    Dibuja el logo del dulce, la tipografía del título, el saludo, icono, fecha y botón de cerrar sesión.
+    Dibuja el logo con el nombre "Algorrico", la fecha/hora con emojis, el saludo, icono y botón de cerrar sesión.
     """
     def __init__(self, parent, usuario_activo="Usuario", comando_logout=None, logo_path="assets/logo_dulce.png", user_icon_path="assets/user_icon.png", *args, **kwargs):
         super().__init__(parent, bg="#F9C0CB", height=115, *args, **kwargs)
@@ -24,33 +24,29 @@ class LogoDulceriaHeader(tk.Frame):
         for widget in self.winfo_children():
             widget.destroy()
 
-        # 1. Sección Izquierda: Logo + Nombre "Dulcería"
+        # ==========================================================
+        # 1. SECCIÓN IZQUIERDA: Logotipo Completo (Algorrico)
+        # ==========================================================
         frame_logo = tk.Frame(self, bg="#F9C0CB")
-        frame_logo.pack(side="left", padx=15, pady=25)
+        frame_logo.pack(side="left", padx=15, pady=5)
 
-        # Cargar imagen del logo del dulce si existe
         try:
             img = Image.open(self.logo_path)
-            img = img.resize((50, 50), Image.Resampling.LANCZOS)
+            alto_deseado = 95
+            ancho_original, alto_original = img.size
+            ancho_deseado = int((ancho_original * alto_deseado) / alto_original)
+            
+            img = img.resize((ancho_deseado, alto_deseado), Image.Resampling.LANCZOS)
             self.logo_img = ImageTk.PhotoImage(img)
-            lbl_logo_img = tk.Label(frame_logo, image=self.logo_img, bg="#F9C0CB")
-            lbl_logo_img.pack(side="left", padx=(0, 10))
+            
+            lbl_logo_img = tk.Label(frame_logo, image=self.logo_img, bg="#F9C0CB", bd=0)
+            lbl_logo_img.pack(side="left")
         except Exception:
-            lbl_logo_fallback = tk.Label(frame_logo, text="🍬", font=("Segoe UI Emoji", 35), bg="#F9C0CB")
-            lbl_logo_fallback.pack(side="left", padx=(0, 10))
-
-        # Texto del Nombre del Negocio
-        lbl_titulo = tk.Label(
-            frame_logo, 
-            text="Dulcería", 
-            font=("Segoe Script", 25), 
-            fg="#000000", 
-            bg="#F9C0CB"
-        )
-        lbl_titulo.pack(side="left")
+            lbl_logo_fallback = tk.Label(frame_logo, text="🍬 Algorrico", font=("Arial", 20, "bold"), bg="#F9C0CB")
+            lbl_logo_fallback.pack(side="left")
 
         # ==========================================================
-        # 2. SECCIÓN DERECHA (Orden: Icono -> Saludo -> Cerrar Sesión -> Reloj)
+        # 2. SECCIÓN DERECHA (Icono -> Saludo -> Cerrar Sesión -> Reloj con Emojis)
         # ==========================================================
         frame_usuario = tk.Frame(self, bg="#F9C0CB")
         frame_usuario.pack(side="right", padx=15, pady=25)
@@ -86,12 +82,12 @@ class LogoDulceriaHeader(tk.Frame):
             )
             btn_logout.pack(side="right", padx=(20, 0))
 
-        # D) ETIQUETA DE FECHA Y HORA (Al extremo izquierdo, justo antes del botón)
+        # D) ETIQUETA DE FECHA Y HORA CON EMOJIS
         self.lbl_reloj = tk.Label(
             frame_usuario, 
             text="", 
-            font=("Consolas", 12), 
-            fg="#333333", 
+            font=("Segoe UI", 9), 
+            fg="#4A2E35", 
             bg="#F9C0CB"
         )
         self.lbl_reloj.pack(side="right", padx=(0, 15))
@@ -100,14 +96,18 @@ class LogoDulceriaHeader(tk.Frame):
         self.actualizar_reloj()
 
     def actualizar_usuario(self, nuevo_usuario):
-        """Método público para cambiar el nombre del usuario dinámicamente."""
+        """Método público seguro para cambiar el nombre del usuario dinámicamente."""
         self.usuario_activo = nuevo_usuario
-        self.lbl_saludo.config(text=f"¡Hola de nuevo, {self.usuario_activo}!")
+        if hasattr(self, 'lbl_saludo'):
+            self.lbl_saludo.config(text=f"¡Hola de nuevo, {self.usuario_activo}!")
 
     def actualizar_reloj(self):
-        """Actualiza la fecha y hora cada segundo sin bloquear la interfaz."""
+        """Actualiza la fecha y la hora combinadas con emojis cada segundo."""
         ahora = datetime.now()
-        tiempo_formateado = ahora.strftime("%d/%m/%Y   %H:%M:%S")
+        # Formato limpio con emojis de calendario y reloj
+        tiempo_formateado = ahora.strftime("📅 %d/%m/%Y   ⏰ %H:%M:%S")
         
-        self.lbl_reloj.config(text=tiempo_formateado)
+        if hasattr(self, 'lbl_reloj'):
+            self.lbl_reloj.config(text=tiempo_formateado)
+            
         self.after(1000, self.actualizar_reloj)
