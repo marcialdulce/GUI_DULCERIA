@@ -23,21 +23,21 @@ class ControladorDulceria:
             self.usuario_actual = usuario
             self.vista.mostrar_alerta("Inicio de sesión", f"¡Bienvenido/a, {usuario}!", "info")
             
-            # Limpiar campos en la vista
-            self.vista.pantallas["PantallaLogin"].txt_usuario.delete(0, 'end')
-            self.vista.pantallas["PantallaLogin"].txt_password.delete(0, 'end')
+            # Limpiar campos en la vista usando los nombres correctos de los atributos
+            self.vista.pantallas["PantallaLogin"].entry_usuario.delete(0, 'end')
+            self.vista.pantallas["PantallaLogin"].entry_pass.delete(0, 'end')
             
             # Actualizar nombre y cambiar pantalla al nuevo Menu Principal
             self.vista.pantallas["MenuPrincipal"].actualizar_usuario(usuario)
             self.vista.mostrar_pantalla("MenuPrincipal")
         else:
-           # VENTANA EMERGENTE DE ERROR
+            # VENTANA EMERGENTE DE ERROR
             self.vista.mostrar_alerta(
                 "Datos incorrectos", 
                 "Las claves de acceso o los datos ingresados no son correctos.\nPor favor, intente nuevamente.", 
                 "error"
             )
-            self.vista.pantallas["PantallaLogin"].txt_password.delete(0, 'end')
+            self.vista.pantallas["PantallaLogin"].entry_pass.delete(0, 'end')
 
     def procesar_cobro_avanzado(self, tipo_pago, datos_factura):
         total = self.modelo.calcular_total()
@@ -109,7 +109,6 @@ class ControladorDulceria:
         return self.modelo.inventario, self.modelo.ticket_actual, total
 
     def solicitar_proveedor(self, nombre_producto, stock_actual):
-        # Aquí puedes programar la lógica de envío de correo, pedido simulado o registro en BD
         respuesta = messagebox.askyesno(
             "Pedido a Proveedor", 
             f"¿Deseas enviar una orden de abastecimiento al proveedor para:\n\n• Producto: {nombre_producto}\n• Stock actual: {stock_actual} unidades?"
@@ -118,7 +117,7 @@ class ControladorDulceria:
             messagebox.showinfo("Solicitud Exitosa", f"¡Pedido enviado al proveedor con éxito para el producto '{nombre_producto}'!")
 
     def cerrar_sesion(self):
-         # Limpiamos el ticket temporal por seguridad para el siguiente usuario
+        # Limpiamos el ticket temporal por seguridad para el siguiente usuario
         self.modelo.ticket_actual.clear()
         
         # Le ordenamos a la ventana principal que muestre el Login
@@ -126,8 +125,8 @@ class ControladorDulceria:
          
         # Limpiamos las cajas de texto del login
         login_screen = self.vista.pantallas["PantallaLogin"]
-        login_screen.txt_usuario.delete(0, tk.END)
-        login_screen.txt_password.delete(0, tk.END)
+        login_screen.entry_usuario.delete(0, tk.END)
+        login_screen.entry_pass.delete(0, tk.END)
 
     def procesar_filtro_inventario(self, texto, marca, categoria):
         # Obtiene la lista filtrada desde el modelo
