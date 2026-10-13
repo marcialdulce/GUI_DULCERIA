@@ -60,6 +60,9 @@ class ControladorDulceria:
         exito, cambio = self.modelo.procesar_cobro(pago)
         
         if exito:
+
+            self.modelo.guardar_inventario() # Persiste el inventario tras descontar el stock
+
             mensaje = f"¡Venta procesada con éxito!\n\nMétodo de pago: {tipo_pago}\n"
             if tipo_pago == "Efectivo":
                 mensaje += f"Cambio a entregar: ${cambio:.2f}\n"

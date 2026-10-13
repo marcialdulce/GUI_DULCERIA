@@ -1,8 +1,11 @@
+import json
+import os
 # ============================================================
 # USUARIOS DEL SISTEMA
 # ============================================================
-
 class ModeloDulceria:
+
+        RUTA_DATOS = "datos/dulceria.json"
 
         def __init__(self):
 
@@ -17,20 +20,52 @@ class ModeloDulceria:
 
         # El ticket debe iniciar completamente vacío
          self.ticket_actual = [] 
+         self.historial_ventas = []
         
-        # Definimos exactamente 4 productos con sus datos reales
-         self.inventario = [
-            {"nombre": "Gomitas", "marca": "Ricolino", "categoria": "Gomitas", "precio": 15.0, "stock": 20},
-            {"nombre": "Chocolate", "marca": "Carlos V", "categoria": "Chocolates", "precio": 12.0, "stock": 15},
-            {"nombre": "Pap's",  "marca": "Totis", "categoria": "Frituras", "precio": 4.0, "stock": 50},
-            {"nombre": "Panditas",  "marca": "Ricolino", "categoria": "Gomitas", "precio": 20.0, "stock": 10},
-            {"nombre": "Kranky", "marca": "Ricolino", "categoria": "Chocolates", "precio": 14.0, "stock": 25},
-            {"nombre": "Bubulubu", "marca": "Ricolino", "categoria": "Chocolates", "precio": 16.0, "stock": 30},
-            {"nombre": "Carlos V Blanco", "marca": "Carlos V", "categoria": "Chocolates", "precio": 13.0, "stock": 20},
-            {"nombre": "Moritas", "marca": "Ricolino", "categoria": "Gomitas", "precio": 12.0, "stock": 40},
-            {"nombre": "Mangomitas", "marca": "Ricolino", "categoria": "Gomitas", "precio": 15.0, "stock": 35},
-            {"nombre": "Donitas Sal y Limón", "marca": "Totis", "categoria": "Frituras", "precio": 6.0, "stock": 60},
-            {"nombre": "Donitas Picantes", "marca": "Totis", "categoria": "Frituras", "precio": 5.0, "stock": 55}
+        # Inventario: Cargarlo desde el JSON
+         self.inventario = []
+         self._cargar_inventario()
+
+         if not self.inventario:
+            self._cargar_inventario_por_defecto()
+            self.guardar_inventario()
+
+        
+              # ---------------- Persistencia JSON ----------------
+        def _cargar_inventario(self):
+         """Lee el inventario desde el JSON. Si no existe, deja la lista vacía."""
+         if not os.path.exists(self.RUTA_DATOS):
+            return
+         try:
+            with open(self.RUTA_DATOS, "r", encoding="utf-8") as f:
+                datos = json.load(f)
+            self.inventario = datos.get("inventario", [])
+         except (json.JSONDecodeError, IOError) as e:
+            print(f"[Modelo] Error al cargar inventario: {e}")
+            self.inventario = []
+
+        def guardar_inventario(self):
+          """Escribe el inventario actual en el JSON (crea la carpeta si no existe)."""
+          carpeta = os.path.dirname(self.RUTA_DATOS)
+          if carpeta:
+            os.makedirs(carpeta, exist_ok=True)
+          with open(self.RUTA_DATOS, "w", encoding="utf-8") as f:
+            json.dump({"inventario": self.inventario}, f, indent=4, ensure_ascii=False)
+
+        def _cargar_inventario_por_defecto(self):
+             """Catálogo inicial: se usa solo la primera vez, cuando no hay JSON."""
+             self.inventario = [
+            {"nombre": "Gomitas",           "marca": "Ricolino", "categoria": "Gomitas",    "precio": 15.0, "stock": 20},
+            {"nombre": "Chocolate",          "marca": "Carlos V", "categoria": "Chocolates", "precio": 12.0, "stock": 15},
+            {"nombre": "Pap's",              "marca": "Totis",    "categoria": "Frituras",   "precio": 4.0,  "stock": 50},
+            {"nombre": "Panditas",           "marca": "Ricolino", "categoria": "Gomitas",    "precio": 20.0, "stock": 10},
+            {"nombre": "Kranky",             "marca": "Ricolino", "categoria": "Chocolates", "precio": 14.0, "stock": 25},
+            {"nombre": "Bubulubu",           "marca": "Ricolino", "categoria": "Chocolates", "precio": 16.0, "stock": 30},
+            {"nombre": "Carlos V Blanco",    "marca": "Carlos V", "categoria": "Chocolates", "precio": 13.0, "stock": 20},
+            {"nombre": "Moritas",            "marca": "Ricolino", "categoria": "Gomitas",    "precio": 12.0, "stock": 40},
+            {"nombre": "Mangomitas",         "marca": "Ricolino", "categoria": "Gomitas",    "precio": 15.0, "stock": 35},
+            {"nombre": "Donitas Sal y Limón","marca": "Totis",    "categoria": "Frituras",   "precio": 6.0,  "stock": 60},
+            {"nombre": "Donitas Picantes",   "marca": "Totis",    "categoria": "Frituras",   "precio": 5.0,  "stock": 55},
         ]
         
 
@@ -133,7 +168,7 @@ class ModeloDulceria:
                 "articulos": self.ticket_actual.copy() 
             }
 
-            self.historial_ventas.append(datos_venta)
+        
             
 
         

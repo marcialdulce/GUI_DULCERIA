@@ -5,3 +5,6 @@ __pycache__/
 # Ignorar facturas generadas por el sistema
 facturas/
 *.pdf
+
+# Datos generados por la app
+datos/
