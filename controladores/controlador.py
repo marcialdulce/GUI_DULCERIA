@@ -135,7 +135,30 @@ class ControladorDulceria:
         # Obtiene la lista filtrada desde el modelo
         return self.modelo.obtener_inventario_filtrado(texto, marca, categoria)
 
-    def procesar_nuevo_producto(self, nombre, marca, categoria, precio, stock):
+        # ========================================================
+    # PROVEEDORES
+    # ========================================================
+    def obtener_proveedores(self):
+        """Devuelve la lista completa de proveedores."""
+        return self.modelo.proveedores
+
+    def procesar_nuevo_proveedor(self, nombre, telefono, correo):
+        """Valida y delega al modelo. Devuelve (ok, mensaje)."""
+        resultado = self.modelo.agregar_proveedor(nombre, telefono, correo)
+
+        if resultado == "nombre_vacio":
+            return False, "El nombre del proveedor no puede estar vacío."
+        if resultado == "ya_existe":
+            return False, f"Ya existe un proveedor con el nombre '{nombre}'."
+
+        return True, f"Proveedor '{nombre}' agregado correctamente."
+
+    def procesar_eliminar_proveedor(self, proveedor_id):
+        """Elimina un proveedor y desvincula sus productos."""
+        self.modelo.eliminar_proveedor(proveedor_id)
+        return True
+
+    def procesar_nuevo_producto(self, nombre, marca, categoria, precio, stock, proveedor_id=None):
         """Valida y delega al modelo. Devuelve (ok, mensaje)."""
         try:
             precio = float(precio)
@@ -143,7 +166,7 @@ class ControladorDulceria:
         except (ValueError, TypeError):
             return False, "Precio y stock deben ser números válidos."
 
-        resultado = self.modelo.agregar_producto(nombre, marca, categoria, precio, stock)
+        resultado = self.modelo.agregar_producto(nombre, marca, categoria, precio, stock, proveedor_id)
 
         if resultado == "nombre_vacio":
             return False, "El nombre del producto no puede estar vacío."
