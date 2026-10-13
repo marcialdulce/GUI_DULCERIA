@@ -51,7 +51,8 @@ class PanelVentas(tk.Frame):
             lambda e: self.canvas_productos.itemconfig(self.canvas_window, width=e.width)
         )
         
-        self.canvas_productos.bind_all("<MouseWheel>", self._on_mousewheel)
+        self.canvas_productos.bind("<Enter>", self._activar_scroll)
+        self.canvas_productos.bind("<Leave>", self._desactivar_scroll)
 
         # ====================================================
         # PANEL DERECHO (Ticket de Venta)
@@ -269,7 +270,26 @@ class PanelVentas(tk.Frame):
         productos, carrito, total = self.controlador.obtener_datos_ventas()
         self.dibujar_catalogo(productos)
         self.dibujar_ticket(carrito, total)
+        self.bind("<Destroy>", self._al_destruir)
+
+    def _al_destruir(self, event=None):
+        """Limpia el binding global si el panel se destruye (cambio de pestaña)."""
+        if event is None or event.widget is self:
+            try:
+                self.canvas_productos.unbind_all("<MouseWheel>")
+            except tk.TclError:
+                pass
+     
+    def _activar_scroll(self, event=None):
+        """Activa la rueda del mouse solo cuando el cursor entra al canvas."""
+        self.canvas_productos.bind_all("<MouseWheel>", self._on_mousewheel)
+
+    def _desactivar_scroll(self, event=None):
+        """Desactiva la rueda al salir, evitando errores cuando el panel se destruye."""
+        self.canvas_productos.unbind_all("<MouseWheel>")
+
 
     def _on_mousewheel(self, event):
-        # event.delta captura la velocidad física. Dividimos entre 120 (estándar de Windows)
+        if not self.canvas_productos.winfo_exists():
+            return
         self.canvas_productos.yview_scroll(int(-1 * (event.delta / 120)), "units")

@@ -67,7 +67,27 @@ class ModeloDulceria:
             {"nombre": "Donitas Sal y Limón","marca": "Totis",    "categoria": "Frituras",   "precio": 6.0,  "stock": 60},
             {"nombre": "Donitas Picantes",   "marca": "Totis",    "categoria": "Frituras",   "precio": 5.0,  "stock": 55},
         ]
-        
+
+        def agregar_producto(self, nombre, marca, categoria, precio, stock):
+            """Agrega un producto nuevo al inventario y lo persiste."""
+         # Validaciones
+            if not nombre or not nombre.strip():
+              return "nombre_vacio"
+            if any(p["nombre"].lower() == nombre.strip().lower() for p in self.inventario):
+              return "ya_existe"
+            if precio <= 0 or stock < 0:
+             return "datos_invalidos"
+
+            self.inventario.append({
+            "nombre": nombre.strip(),
+            "marca": marca.strip() or "Genérica",
+            "categoria": categoria.strip() or "General",
+            "precio": float(precio),
+            "stock": int(stock)
+            })
+            self.guardar_inventario()   # persistir inmediatamente
+            return True
+
 
         # Validación de los usuarios dentro del sistema
         def validar_usuario (self, usuario, password):

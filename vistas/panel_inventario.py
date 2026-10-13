@@ -36,6 +36,14 @@ class PanelInventario(tk.Frame):
         self.combo_categoria.pack(side="left")
         self.combo_categoria.bind("<<ComboboxSelected>>", lambda e: self.notificar_filtros())
 
+        btn_nuevo = tk.Button(
+            barra_filtros, text="NUEVO PRODUCTO",
+            bg="#27AE60", fg=estilos.BLANCO,
+            font=("Arial", 9, "bold"),
+            command=self.abrir_ventana_nuevo_producto
+        )
+        btn_nuevo.pack(side="right", padx=10, pady=5)
+
         # Botón integrador dentro de la misma pestaña para ver pedidos
         btn_pedidos = tk.Button(barra_filtros, text="📦 VER / CANCELAR PEDIDOS", bg="#2C3E50", fg=estilos.BLANCO, 
                                 font=("Arial", 9, "bold"), command=self.abrir_ventana_pedidos)
@@ -99,7 +107,7 @@ class PanelInventario(tk.Frame):
             else:
                 estado = "ÓPTIMO"
                 tag = "optimo"
-                accion = "➕ PEDIR EXTRA"
+                accion = "+ PEDIR EXTRA"
 
             self.tabla_inv.insert("", "end", values=(
                 nombre, prod["marca"], prod["categoria"],
@@ -182,8 +190,8 @@ class PanelInventario(tk.Frame):
         cols_pedidos = ("ID", "PRODUCTO", "CANTIDAD", "ESTADO")
         tabla_pedidos = ttk.Treeview(ventana_pedidos, columns=cols_pedidos, show="headings", height=8, selectmode="browse")
         for col in cols_pedidos:
-            tabla_pedidos.heading(col, text=col)
-            tabla_pedidos.column(col, anchor="center", width=130)
+                tabla_pedidos.heading(col, text=col)
+                tabla_pedidos.column(col, anchor="center", width=130)
         tabla_pedidos.pack(pady=5, padx=10, fill="both", expand=True)
 
         def actualizar_tabla_pedidos():
@@ -213,3 +221,63 @@ class PanelInventario(tk.Frame):
         btn_cancelar = tk.Button(ventana_pedidos, text="❌ Cancelar Pedido Seleccionado", bg="#C0392B", fg=estilos.BLANCO, 
                                  font=("Arial", 9, "bold"), command=cancelar_pedido_seleccionado)
         btn_cancelar.pack(pady=12)
+
+    def abrir_ventana_nuevo_producto(self):
+            """Formulario emergente para dar de alta un producto."""
+            modal = tk.Toplevel(self)
+            modal.title("Nuevo Producto")
+            modal.geometry("400x400")
+            modal.config(bg=estilos.FONDO)
+            modal.grab_set()
+
+            tk.Label(modal, text="ALTA DE PRODUCTO",
+                    bg=estilos.FONDO, font=("Arial", 12, "bold")).pack(pady=15)
+
+            campos = tk.Frame(modal, bg=estilos.FONDO)
+            campos.pack(pady=10)
+
+            # Nombre
+            tk.Label(campos, text="Nombre:", bg=estilos.FONDO).grid(row=0, column=0, sticky="e", pady=5)
+            entry_nombre = tk.Entry(campos, width=25)
+            entry_nombre.grid(row=0, column=1, pady=5, padx=5)
+
+            # Marca
+            tk.Label(campos, text="Marca:", bg=estilos.FONDO).grid(row=1, column=0, sticky="e", pady=5)
+            entry_marca = tk.Entry(campos, width=25)
+            entry_marca.grid(row=1, column=1, pady=5, padx=5)
+
+            # Categoría
+            tk.Label(campos, text="Categoría:", bg=estilos.FONDO).grid(row=2, column=0, sticky="e", pady=5)
+            combo_cat = ttk.Combobox(campos, values=["Gomitas", "Chocolates", "Frituras", "General"],
+                                    width=22, state="readonly")
+            combo_cat.current(0)
+            combo_cat.grid(row=2, column=1, pady=5, padx=5)
+
+            # Precio
+            tk.Label(campos, text="Precio ($):", bg=estilos.FONDO).grid(row=3, column=0, sticky="e", pady=5)
+            entry_precio = tk.Entry(campos, width=25)
+            entry_precio.grid(row=3, column=1, pady=5, padx=5)
+
+            # Stock
+            tk.Label(campos, text="Stock inicial:", bg=estilos.FONDO).grid(row=4, column=0, sticky="e", pady=5)
+            entry_stock = tk.Entry(campos, width=25)
+            entry_stock.grid(row=4, column=1, pady=5, padx=5)
+
+            def guardar():
+                ok, msg = self.controlador.procesar_nuevo_producto(
+                    entry_nombre.get(),
+                    entry_marca.get(),
+                    combo_cat.get(),
+                    entry_precio.get(),
+                    entry_stock.get()
+                )
+                if ok:
+                    messagebox.showinfo("Éxito", msg, parent=modal)
+                    modal.destroy()
+                    self.notificar_filtros()   #  refresca la tabla al instante
+                else:
+                    messagebox.showerror("Error", msg, parent=modal)
+
+            tk.Button(modal, text="GUARDAR", bg="#27AE60", fg="white",
+                    font=("Arial", 10, "bold"), width=15,
+                    command=guardar).pack(pady=20)

@@ -134,3 +134,22 @@ class ControladorDulceria:
     def procesar_filtro_inventario(self, texto, marca, categoria):
         # Obtiene la lista filtrada desde el modelo
         return self.modelo.obtener_inventario_filtrado(texto, marca, categoria)
+
+    def procesar_nuevo_producto(self, nombre, marca, categoria, precio, stock):
+        """Valida y delega al modelo. Devuelve (ok, mensaje)."""
+        try:
+            precio = float(precio)
+            stock  = int(stock)
+        except (ValueError, TypeError):
+            return False, "Precio y stock deben ser números válidos."
+
+        resultado = self.modelo.agregar_producto(nombre, marca, categoria, precio, stock)
+
+        if resultado == "nombre_vacio":
+            return False, "El nombre del producto no puede estar vacío."
+        if resultado == "ya_existe":
+            return False, f"Ya existe un producto llamado '{nombre}'."
+        if resultado == "datos_invalidos":
+            return False, "El precio debe ser mayor a 0 y el stock no puede ser negativo."
+
+        return True, f"Producto '{nombre}' agregado correctamente."
