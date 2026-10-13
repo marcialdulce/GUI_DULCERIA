@@ -21,6 +21,8 @@ class ModeloDulceria:
         # El ticket debe iniciar completamente vacío
          self.ticket_actual = [] 
          self.historial_ventas = []
+
+         self.proveedores = [] # Cargar los proveedores
         
         # Inventario: Cargarlo desde el JSON
          self.inventario = []
@@ -40,6 +42,7 @@ class ModeloDulceria:
             with open(self.RUTA_DATOS, "r", encoding="utf-8") as f:
                 datos = json.load(f)
             self.inventario = datos.get("inventario", [])
+            self.provedores = datos.get("proveedores", [])
          except (json.JSONDecodeError, IOError) as e:
             print(f"[Modelo] Error al cargar inventario: {e}")
             self.inventario = []
@@ -50,7 +53,41 @@ class ModeloDulceria:
           if carpeta:
             os.makedirs(carpeta, exist_ok=True)
           with open(self.RUTA_DATOS, "w", encoding="utf-8") as f:
-            json.dump({"inventario": self.inventario}, f, indent=4, ensure_ascii=False)
+            json.dump({
+               "inventario": self.inventario,
+               "proveedores": self.proveedores
+            }, f, indent=4, ensure_ascii=False)
+
+        def agregar_proveedor(self, nombre, telefono="", correo=""):
+            """Crea un proveedor nuevo y lo persiste. Devuelve su id o un error."""
+            if not nombre or not nombre.strip():
+                return "nombre_vacio"
+            if any(p["nombre"].lower() == nombre.strip().lower() for p in self.proveedores):
+                return "ya_existe"
+
+            nuevo_id = max((p["id"] for p in self.proveedores), default=0) + 1
+            self.proveedores.append({
+                "id": nuevo_id,
+                "nombre": nombre.strip(),
+                "telefono": telefono.strip(),
+                "correo": correo.strip()
+            })
+            self.guardar_inventario()
+            return nuevo_id
+
+        def obtener_proveedor(self, proveedor_id):
+            """Devuelve el proveedor o None si no existe."""
+            return next((p for p in self.proveedores if p["id"] == proveedor_id), None)
+
+        def eliminar_proveedor(self, proveedor_id):
+            """Elimina un proveedor y desvincula sus productos."""
+            self.proveedores = [p for p in self.proveedores if p["id"] != proveedor_id]
+            # Desvincular productos que apuntaban a este proveedor
+            for prod in self.inventario:
+                if prod.get("proveedor_id") == proveedor_id:
+                    prod["proveedor_id"] = None
+            self.guardar_inventario()
+            return True
 
         def _cargar_inventario_por_defecto(self):
              """Catálogo inicial: se usa solo la primera vez, cuando no hay JSON."""
@@ -79,11 +116,12 @@ class ModeloDulceria:
              return "datos_invalidos"
 
             self.inventario.append({
-            "nombre": nombre.strip(),
-            "marca": marca.strip() or "Genérica",
-            "categoria": categoria.strip() or "General",
-            "precio": float(precio),
-            "stock": int(stock)
+                "nombre": nombre.strip(),
+                "marca": marca.strip() or "Genérica",
+                "categoria": categoria.strip() or "General",
+                "precio": float(precio),
+                "stock": int(stock),
+                "proveedor_id": proveedor_id
             })
             self.guardar_inventario()   # persistir inmediatamente
             return True
@@ -152,6 +190,8 @@ class ModeloDulceria:
                 coincide_nombre = texto_busqueda in producto["nombre"].lower()
                 coincide_marca = marca == "Todas" or producto["marca"] == marca
                 coincide_cat = categoria == "Todas" or producto["categoria"] == categoria
+                prov = self.obtener_proveedor(producto.get("proveedor_id"))
+                nombre_prov = prov["nombre"] if prov else "—"
 
                 if coincide_nombre and coincide_marca and coincide_cat:
 
@@ -170,8 +210,8 @@ class ModeloDulceria:
                         "categoria": producto["categoria"],
                         "precio": producto["precio"],
                         "stock": producto["stock"],
-                        "estado": estado
-
+                        "estado": estado,
+                        "proveedor": nombre_prov
                     })
 
             return resultados
