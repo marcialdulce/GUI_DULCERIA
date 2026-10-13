@@ -5,6 +5,7 @@ from vistas.panel_ventas import PanelVentas
 from vistas.panel_inventario import PanelInventario
 from vistas.panel_apartados import PanelApartados
 from vistas.panel_historial import PanelHistorial
+from vistas.panel_proveedores import PanelProveedores
 from vistas.login import PantallaLogin
 from vistas.header import LogoDulceriaHeader
 
@@ -33,7 +34,7 @@ class MenuPrincipal(tk.Frame):
         menu.pack(fill="x")
         menu.pack_propagate(False)
 
-        opciones = ["INICIO", "NUEVA VENTA", "INVENTARIO", "APARTADOS", "HISTORIAL"]
+        opciones = ["INICIO", "NUEVA VENTA", "INVENTARIO", "APARTADOS", "PROVEEDORES", "HISTORIAL"]
         self.botones_menu = {}
 
         for opcion in opciones:
@@ -86,6 +87,10 @@ class MenuPrincipal(tk.Frame):
 
         elif opcion == "APARTADOS":
             panel = PanelApartados(self.contenido, self.controlador)
+            panel.pack(fill="both", expand=True)
+
+        elif opcion == "PROVEEDORES":
+            panel = PanelProveedores(self.contenido, self.controlador)
             panel.pack(fill="both", expand=True)
 
         elif opcion == "HISTORIAL":

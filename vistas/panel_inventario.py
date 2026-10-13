@@ -55,13 +55,15 @@ class PanelInventario(tk.Frame):
         self.style.configure("Treeview.Heading", font=("Arial", 9, "bold"))
 
         # Definimos las columnas incluyendo la opción de gestión/proveedor
-        columnas = ("PRODUCTO", "MARCA", "CATEGORÍA", "PRECIO", "STOCK", "ESTADO", "ACCIÓN")
+        columnas = ("PRODUCTO", "MARCA", "CATEGORÍA", "PRECIO", "STOCK", "ESTADO", "PROVEEDOR", "ACCIÓN")
         self.tabla_inv = ttk.Treeview(panel_principal, columns=columnas, show="headings", height=10)
 
         for col in columnas:
             self.tabla_inv.heading(col, text=col)
             if col == "ACCIÓN":
                 self.tabla_inv.column(col, anchor="center", width=130)
+            elif col == "PROVEEDOR":
+                self.tabla_inv.column(col, anchor="center", width=140)
             else:
                 self.tabla_inv.column(col, anchor="center", width=100)
 
@@ -111,7 +113,8 @@ class PanelInventario(tk.Frame):
 
             self.tabla_inv.insert("", "end", values=(
                 nombre, prod["marca"], prod["categoria"],
-                f"${prod['precio']:.2f}", stock, estado, accion
+                f"${prod['precio']:.2f}", stock, estado,
+                prod["proveedor"], accion
             ), tags=(tag,))
 
         # Aplicamos colores de fondo a las filas (cambiamos pendiente a azul pastel suave)
@@ -126,7 +129,7 @@ class PanelInventario(tk.Frame):
             columna = self.tabla_inv.identify_column(event.x)
             item = self.tabla_inv.identify_row(event.y)
             
-            if columna == "#7":  # Columna de ACCIÓN
+            if columna == "#8":  # Columna de ACCIÓN
                 valores = self.tabla_inv.item(item, "values")
                 if valores:
                     nombre_producto = valores[0]
@@ -226,7 +229,7 @@ class PanelInventario(tk.Frame):
             """Formulario emergente para dar de alta un producto."""
             modal = tk.Toplevel(self)
             modal.title("Nuevo Producto")
-            modal.geometry("400x400")
+            modal.geometry("420x460")
             modal.config(bg=estilos.FONDO)
             modal.grab_set()
 
@@ -263,13 +266,34 @@ class PanelInventario(tk.Frame):
             entry_stock = tk.Entry(campos, width=25)
             entry_stock.grid(row=4, column=1, pady=5, padx=5)
 
+                    # Proveedor (ComboBox)
+            tk.Label(campos, text="Proveedor:",
+                    bg=estilos.FONDO).grid(row=5, column=0, sticky="e", pady=5)
+
+            proveedores = self.controlador.obtener_proveedores()
+            opciones = ["— Sin proveedor —"] + [p["nombre"] for p in proveedores]
+            mapa_prov = {p["nombre"]: p["id"] for p in proveedores}
+
+            combo_prov = ttk.Combobox(campos, values=opciones,
+                                    width=22, state="readonly")
+            combo_prov.current(0)
+            combo_prov.grid(row=5, column=1, pady=5, padx=5)
+
+            if not proveedores:
+                tk.Label(campos,
+                        text="(Registra proveedores en la pestaña PROVEEDORES)",
+                        bg=estilos.FONDO, fg="#C0392B",
+                        font=("Arial", 8, "italic")
+                        ).grid(row=6, column=1, sticky="w")
+
             def guardar():
                 ok, msg = self.controlador.procesar_nuevo_producto(
                     entry_nombre.get(),
                     entry_marca.get(),
                     combo_cat.get(),
                     entry_precio.get(),
-                    entry_stock.get()
+                    entry_stock.get(),
+                    proveedor_id
                 )
                 if ok:
                     messagebox.showinfo("Éxito", msg, parent=modal)
