@@ -6,6 +6,7 @@ from reportlab.pdfgen import canvas
 from modelos.modelo import ModeloDulceria
 from vistas.ventana_principal import VistaDulceria
 from vistas.generador_tickets import generar_ticket_pdf
+from servicios.hilo_factura import HiloFactura
 
 class ControladorDulceria:
     def __init__(self):
@@ -70,30 +71,29 @@ class ControladorDulceria:
             # Si el usuario solicitó factura
             if datos_factura and datos_factura.get("requiere"):
                 nombre_archivo = f"Factura_{datos_factura['rfc']}.pdf"
-                
-                # Unir el nombre y apellidos para mandarlo como "Razón Social"
-                razon_social_cliente = f"{datos_factura.get('nombre', '')} {datos_factura.get('apellidos', '')}".strip()
-                
-                generar_ticket_pdf(
+                razon_social = f"{datos_factura.get('nombre','')} {datos_factura.get('apellidos','')}".strip()
+
+                self.hilo_factura = HiloFactura(          # crear
                     nombre_archivo=nombre_archivo,
                     rfc=datos_factura['rfc'],
-                    razon_social=razon_social_cliente,
+                    razon_social=razon_social,
                     total=total,
-                    carrito_comprado=carrito_respaldo,
+                    carrito=carrito_respaldo,
                     metodo_pago=tipo_pago,
                     pago=pago,
                     cambio=cambio
                 )
-                
-                mensaje += f"\n--- FACTURA GENERADA ---\n" \
-                           f"Nombre: {datos_factura['nombre']} {datos_factura['apellidos']}\n" \
-                           f"Correo: {datos_factura['correo']}\n" \
-                           f"RFC: {datos_factura['rfc']}\n" \
-                           f"Archivo: {nombre_archivo}"
-            
+                self.hilo_factura.start()                  # start()
+                self.hilo_factura.join(timeout=3)          # join() — esperar 3s max
+                self.hilo_factura.set_prioridad(7)         # setPriority()
+
+                if self.hilo_factura.exito:
+                    mensaje += f"\n Factura generada: {nombre_archivo}"
+                else:
+                    mensaje += f"\n Error al generar factura: {self.hilo_factura.error}"
+
             messagebox.showinfo("Ticket Cobrado", mensaje)
-        else:
-            messagebox.showerror("Pago Insuficiente", f"Faltan ${total - pago:.2f} para completar la venta.")
+
         
     def procesar_agregar(self, nombre_producto):
         cantidad = simpledialog.askinteger("Cantidad", f"¿Cuantos {nombre_producto} deseas agregar?")
