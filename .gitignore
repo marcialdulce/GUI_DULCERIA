@@ -8,3 +8,6 @@ facturas/
 
 # Datos generados por la app
 datos/
+
+# Reportes CSV exportados por la app
+reportes/
