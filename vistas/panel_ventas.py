@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox
 from vistas import estilos
 
 CREDITO = "Crédito"
+EVENTO_RUEDA = "<MouseWheel>"
 
 class PanelVentas(tk.Frame):
     def __init__(self, parent, controlador):
@@ -137,7 +138,18 @@ class PanelVentas(tk.Frame):
     def abrir_ventana_factura(self):
         modal_fac = tk.Toplevel(self)
         modal_fac.title("Datos de Facturación")
-        modal_fac.geometry("380x350")
+        ancho_ventana = 380
+        alto_ventana = 350
+        
+        # Obtenemos el tamaño de la pantalla del usuario
+        ancho_pantalla = modal_fac.winfo_screenwidth()
+        alto_pantalla = modal_fac.winfo_screenheight()
+        
+        x = (ancho_pantalla // 2) - (ancho_ventana // 2)
+        y = (alto_pantalla // 2) - (alto_ventana // 2)    
+        modal_fac.geometry(f"{ancho_ventana}x{alto_ventana}+{x}+{y}")
+ 
+        
         modal_fac.config(bg=estilos.FONDO)
         modal_fac.grab_set()
 
@@ -215,10 +227,19 @@ class PanelVentas(tk.Frame):
             if hasattr(self.controlador, "procesar_cobro_avanzado"):
                 self.controlador.procesar_cobro_avanzado(detalle_pago, datos_factura)
 
-            # Ventana emergente de éxito
             modal_cobro = tk.Toplevel(self)
             modal_cobro.title("Cobro con Tarjeta")
-            modal_cobro.geometry("300x180")
+            ancho_ventana = 300
+            alto_ventana = 180
+            
+            ancho_pantalla = modal_cobro.winfo_screenwidth()
+            alto_pantalla = modal_cobro.winfo_screenheight()
+            
+            x = (ancho_pantalla // 2) - (ancho_ventana // 2)
+            y = (alto_pantalla // 2) - (alto_ventana // 2)
+            
+            modal_cobro.geometry(f"{ancho_ventana}x{alto_ventana}+{x}+{y}")
+            
             modal_cobro.config(bg=estilos.FONDO)
             modal_cobro.grab_set()
 
@@ -276,17 +297,17 @@ class PanelVentas(tk.Frame):
         """Limpia el binding global si el panel se destruye (cambio de pestaña)."""
         if event is None or event.widget is self:
             try:
-                self.canvas_productos.unbind_all("<MouseWheel>")
+                self.canvas_productos.unbind_all(EVENTO_RUEDA)
             except tk.TclError:
                 pass
      
     def _activar_scroll(self, event=None):
         """Activa la rueda del mouse solo cuando el cursor entra al canvas."""
-        self.canvas_productos.bind_all("<MouseWheel>", self._on_mousewheel)
+        self.canvas_productos.bind_all(EVENTO_RUEDA, self._on_mousewheel)
 
     def _desactivar_scroll(self, event=None):
         """Desactiva la rueda al salir, evitando errores cuando el panel se destruye."""
-        self.canvas_productos.unbind_all("<MouseWheel>")
+        self.canvas_productos.unbind_all(EVENTO_RUEDA)
 
 
     def _on_mousewheel(self, event):
