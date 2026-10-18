@@ -4,6 +4,7 @@ Se ubica en la capa de servicios porque es una utilidad de
 infraestructura
 """
 import threading
+import time
 from vistas.generador_tickets import generar_ticket_pdf
 
 
@@ -12,7 +13,10 @@ class HiloFactura(threading.Thread):
 
     def __init__(self, nombre_archivo, rfc, razon_social, total,
                  carrito, metodo_pago, pago, cambio, prioridad=5):
+        
+        # setName(): Se usa name= para asignar el nombre del hilo
         super().__init__(name=f"HiloFactura-{rfc}", daemon=True)
+
         self.nombre_archivo = nombre_archivo
         self.rfc = rfc
         self.razon_social = razon_social
@@ -25,10 +29,32 @@ class HiloFactura(threading.Thread):
         self.exito = False
         self.error = None
 
+        # Atributos de control (prioridad, stop, pause)
+        self._prioridad = prioridad
+        self._stop_event = threading.Event()
+        self._pause_event = threading.Event()
+        self._pause_event.set() # Inicia despierto (no pausado)
+
     # run()  el cuerpo del hilo
     def run(self):
+          # Simulamos que ReportLab tarda 3 segundos en preparar el PDF
+          # Hacemos 30 iteraciones de 0.1 segundos para poder pausar o detener el hilo en el proceso
         try:
-            generar_ticket_pdf(
+            for _ in range(30):
+
+                # Verificamos si se solicitó STOP (detener)
+                if self._stop_event.is_set():
+                    print(f"[{self.name}] Hilo detenido antes de generar la factura.")
+                    return # Sale del hilo y pasa a DEAD
+
+                # Verificamos si se solicitó SUSPEND (pausar)
+                self._pause_event.wait() # Si _pause_event esta en False, el hilo se queda esperando aqui
+
+                # Pausa real de 0.1 segundos
+                time.sleep(0.1)
+
+                # Simulamos trabajo de ReportLab
+                generar_ticket_pdf(
                 nombre_archivo=self.nombre_archivo,
                 rfc=self.rfc,
                 razon_social=self.razon_social,
@@ -38,19 +64,37 @@ class HiloFactura(threading.Thread):
                 pago=self.pago,
                 cambio=self.cambio
             )
-            self.exito = True
+                self.exito = True
+                break # Termina y pasa a DEAD
+
             print(f"[{self.name}] Factura generada: {self.nombre_archivo}")
         except Exception as e:
             self.error = str(e)
             print(f"[{self.name}] Error: {e}")
 
-    # setName / getName
-    def get_nombre(self):
-        return self.name
+    # --- Métodos solicitados  ---
 
-    # setPriority / getPriority (simulado)
+    def stop(self):
+        # Detiene el hilo (reemplaza a stop() de Java)
+        self._stop_event.set()
+        self._pause_event.set() # Lo despierta por si estaba pausado para que pueda morir
+
+    def suspend(self):
+        # Pausa el hilo (reemplaza a suspend() de Java)
+        self._pause_event.clear()
+
+    def resume(self):
+        # Reanuda el hilo (reemplaza a resume() de Java)
+        self._pause_event.set()
+
     def set_prioridad(self, valor):
+        """setPriority() simulado."""
         self._prioridad = valor
 
     def get_prioridad(self):
+        """getPriority() simulado."""
         return self._prioridad
+
+    def get_nombre(self):
+        """getName()."""
+        return self.name
