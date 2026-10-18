@@ -101,21 +101,23 @@ class ControladorDulceria:
             # Este es el equivalente  al Runnable de Java: separar la tarea del hilo
             self.hilo_secundario = threading.Thread(
                 target=self._tarea_notificar_fin, 
-                args=(nombre_archivo,),
-                daemon=True
+                 args=(nombre_archivo, self.vista.pantallas["MenuPrincipal"].contenido.winfo_children()[0])
             )
             self.hilo_secundario.start()
             
             # join(): Esperamos un máximo de 4 segundos a que la factura termine para reportar
             self.hilo_factura.join(timeout=4)
 
-    def _tarea_notificar_fin(self, nombre_archivo):
+    def _tarea_notificar_fin(self, nombre_archivo, panel_ventas):
             # Esta funcion es el "Runnable". Se ejecuta de forma paralela
             self.hilo_factura.join() # Espera a que el hilo de la factura muera (DEAD)
             if self.hilo_factura.exito:
-                print(f"Éxito: {nombre_archivo} generado.")
+              mensaje = f" Listo: {nombre_archivo}"
+            # Usamos after(0, ...) para actualizar la interfaz de forma segura
+              self.vista.after(0, lambda: panel_ventas.actualizar_estado_factura(mensaje, "green"))
             elif self.hilo_factura.error:
-                print(f"Error: {self.hilo_factura.error}")
+                mensaje = " Error al generar PDF"
+            self.vista.after(0, lambda: panel_ventas.actualizar_estado_factura(mensaje, "red"))
     
         
     def procesar_agregar(self, nombre_producto):

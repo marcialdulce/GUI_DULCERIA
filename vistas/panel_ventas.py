@@ -116,7 +116,16 @@ class PanelVentas(tk.Frame):
         frame_botones = tk.Frame(panel_der, bg="#F4F4F4")
         frame_botones.pack(fill="x", padx=10, pady=10)
         tk.Button(frame_botones, text="COBRAR", bg="#F4D03F", font=("Arial", 10, "bold"), relief="flat", command=self.procesar_cobro_principal).pack(side="right", expand=True, fill="x", padx=5)
-        
+       
+        self.lbl_estado_factura = tk.Label(
+            frame_botones, 
+            text="", 
+            bg="#F4F4F4", 
+            fg="green", 
+            font=("Arial", 9, "bold")
+        )
+        self.lbl_estado_factura.pack(side="left", padx=5)
+
         self.refrescar_pantalla()
 
     # FUNCIÓN PARA MOSTRAR/OCULTAR TIPO DE TARJETA
@@ -314,3 +323,6 @@ class PanelVentas(tk.Frame):
         if not self.canvas_productos.winfo_exists():
             return
         self.canvas_productos.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def actualizar_estado_factura(self, mensaje, color="green"):
+        self.lbl_estado_factura.config(text=mensaje, fg=color)
