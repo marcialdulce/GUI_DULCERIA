@@ -42,10 +42,11 @@ class ModeloDulceria:
             with open(self.RUTA_DATOS, "r", encoding="utf-8") as f:
                 datos = json.load(f)
             self.inventario = datos.get("inventario", [])
-            self.provedores = datos.get("proveedores", [])
+            self.proveedores = datos.get("proveedores", [])
          except (json.JSONDecodeError, IOError) as e:
             print(f"[Modelo] Error al cargar inventario: {e}")
             self.inventario = []
+            self.proveedores = []
 
         def guardar_inventario(self):
           """Escribe el inventario actual en el JSON (crea la carpeta si no existe)."""
@@ -105,7 +106,7 @@ class ModeloDulceria:
             {"nombre": "Donitas Picantes",   "marca": "Totis",    "categoria": "Frituras",   "precio": 5.0,  "stock": 55},
         ]
 
-        def agregar_producto(self, nombre, marca, categoria, precio, stock):
+        def agregar_producto(self, nombre, marca, categoria, precio, stock, proveedor_id=None):
             """Agrega un producto nuevo al inventario y lo persiste."""
          # Validaciones
             if not nombre or not nombre.strip():
@@ -160,7 +161,7 @@ class ModeloDulceria:
                     "cantidad": cantidad,
                     "subtotal": dulce["precio"] * cantidad
                 })
-                return True
+            return True
          
           
         def calcular_total(self):
@@ -227,6 +228,7 @@ class ModeloDulceria:
                 },
                 "articulos": self.ticket_actual.copy() 
             }
+            self.historial_ventas.append(datos_venta)
 
         
             
