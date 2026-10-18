@@ -1,5 +1,6 @@
 import tkinter as tk
 import os
+import queue
 import threading
 from tkinter import messagebox, simpledialog
 from datetime import datetime
@@ -8,11 +9,26 @@ from modelos.modelo import ModeloDulceria
 from vistas.ventana_principal import VistaDulceria
 from vistas.generador_tickets import generar_ticket_pdf
 from servicios.hilo_factura import HiloFactura
+from servicios.repositorio_ventas import RepositorioVentas
+from servicios.tareas_ventas import TareaCargarVentas, TareaExportarReporte
 
 class ControladorDulceria:
     def __init__(self):
         self.modelo = ModeloDulceria()
         self.usuario_actual = None
+
+        # --- Procesamiento de ventas en segundo plano (Thread + Runnable) ---
+        # Estas variables SOLO se modifican desde el hilo principal (Tkinter).
+        # Los hilos de trabajo no las tocan: se comunican por la cola.
+        self.repo_ventas = RepositorioVentas()
+        self.cola_tareas = queue.Queue()           # hilos de trabajo -> ventana
+        self.hilo_carga = None
+        self.hilo_export = None
+        self._cancelar_carga = threading.Event()
+        self.resumen_ventas = None                 # datos ya preparados (se reemplaza completo)
+        self.estado_carga = {"estado": "inactivo", "porcentaje": 0.0, "leidas": 0, "mensaje": ""}
+        self.estado_export = {"estado": "inactivo", "ruta": ""}
+        self._notificaciones = []
 
     def iniciar(self):
         self.vista.mainloop()
@@ -65,6 +81,19 @@ class ControladorDulceria:
 
             self.modelo.guardar_inventario() # Persiste el inventario tras descontar el stock
 
+            # Registra la venta en el historial (lo que luego lee la tarea en segundo plano)
+            aviso_historial = ""
+            try:
+                self.repo_ventas.registrar(
+                    metodo_pago=tipo_pago,
+                    total=total,
+                    articulos=carrito_respaldo,
+                    facturado=bool(datos_factura and datos_factura.get("requiere")),
+                )
+            except OSError as e:
+                # El cobro ya se hizo; solo avisamos que no quedó en el historial
+                aviso_historial = f"\n\nAviso: la venta no se pudo guardar en el historial ({e.strerror or e})."
+
             mensaje = f"¡Venta procesada con éxito!\n\nMétodo de pago: {tipo_pago}\n"
             if tipo_pago == "Efectivo":
                 mensaje += f"Cambio a entregar: ${cambio:.2f}\n"
@@ -105,7 +134,7 @@ class ControladorDulceria:
                 
                     mensaje += "\n Factura generándose en segundo plano..."
 
-            messagebox.showinfo("Ticket Cobrado", mensaje)
+            messagebox.showinfo("Ticket Cobrado", mensaje + aviso_historial)
            
 
     def _tarea_notificar_fin(self, nombre_archivo, panel_ventas):
@@ -124,6 +153,85 @@ class ControladorDulceria:
                 self.vista.after(0, lambda e=self.hilo_factura.error: messagebox.showerror("Error de Facturación", f"No se pudo guardar el PDF:\n{e}"))
     
         
+    # ========================================================
+    # VENTAS EN SEGUNDO PLANO (Thread + Runnable)
+    # ========================================================
+    def iniciar_carga_ventas(self, fecha_filtro=""):
+        """Lanza la lectura masiva en un hilo. Devuelve False si ya hay una en curso."""
+        if self.estado_carga["estado"] in ("cargando", "cancelando"):
+            return False
+
+        self._cancelar_carga = threading.Event()
+        # RUNNABLE: describe QUÉ se hace (leer y resumir las ventas)
+        tarea = TareaCargarVentas(self.repo_ventas, self.cola_tareas,
+                                  self._cancelar_carga, fecha_filtro)
+        # THREAD: es QUIEN lo ejecuta, para que el mainloop siga atendiendo la ventana
+        self.hilo_carga = threading.Thread(target=tarea.run, name="HiloCargaVentas", daemon=True)
+        self.estado_carga = {"estado": "cargando", "porcentaje": 0.0, "leidas": 0, "mensaje": ""}
+        self.hilo_carga.start()
+        return True
+
+    def cancelar_carga_ventas(self):
+        if self.estado_carga["estado"] == "cargando":
+            self.estado_carga["estado"] = "cancelando"
+            self._cancelar_carga.set()
+
+    def exportar_reporte(self, carpeta):
+        """Guarda el resumen ya preparado en un CSV, en otro hilo. Devuelve (ok, mensaje)."""
+        if self.resumen_ventas is None:
+            return False, "Primero carga las ventas (botón BUSCAR) para tener datos que exportar."
+        if self.estado_export["estado"] == "guardando":
+            return False, "Ya se está guardando un reporte. Espera a que termine."
+
+        carpeta = (carpeta or "").strip() or "reportes"
+        tarea = TareaExportarReporte(self.resumen_ventas, carpeta, self.cola_tareas)
+        self.hilo_export = threading.Thread(target=tarea.run, name="HiloExportarReporte", daemon=True)
+        self.estado_export = {"estado": "guardando", "ruta": ""}
+        self.hilo_export.start()
+        return True, ""
+
+    def hay_tareas_activas(self):
+        return (self.estado_carga["estado"] in ("cargando", "cancelando")
+                or self.estado_export["estado"] == "guardando")
+
+    def sondear_tareas(self):
+        """Lo llama la ventana con after(): vacía la cola y actualiza el estado.
+        Es el ÚNICO lugar donde los mensajes de los hilos se vuelven estado."""
+        while True:
+            try:
+                msg = self.cola_tareas.get_nowait()
+            except queue.Empty:
+                return
+            self._aplicar_mensaje(msg)
+
+    def _aplicar_mensaje(self, msg):
+        tipo = msg["tipo"]
+        if msg["tarea"] == "carga":
+            e = self.estado_carga
+            if tipo == "progreso":
+                e["porcentaje"], e["leidas"] = msg["porcentaje"], msg["leidas"]
+            elif tipo == "terminado":
+                self.resumen_ventas = msg["resumen"]   # se publica completo, de un golpe
+                e.update(estado="terminado", porcentaje=100.0, leidas=msg["leidas"])
+            elif tipo == "cancelado":
+                e["estado"] = "cancelado"
+            elif tipo == "error":
+                e.update(estado="error", mensaje=msg["mensaje"])
+                self._notificaciones.append(("error", "Error al cargar ventas", msg["mensaje"]))
+        else:
+            if tipo == "terminado":
+                self.estado_export = {"estado": "terminado", "ruta": msg["ruta"]}
+                self._notificaciones.append(("info", "Reporte generado",
+                                             f"El reporte se guardó en:\n{os.path.abspath(msg['ruta'])}"))
+            elif tipo == "error":
+                self.estado_export = {"estado": "error", "ruta": ""}
+                self._notificaciones.append(("error", "No se pudo guardar el reporte", msg["mensaje"]))
+
+    def tomar_notificaciones(self):
+        """Devuelve y vacía los avisos pendientes para mostrarlos en la ventana."""
+        pendientes, self._notificaciones = self._notificaciones, []
+        return pendientes
+
     def procesar_agregar(self, nombre_producto):
         cantidad = simpledialog.askinteger("Cantidad", f"¿Cuantos {nombre_producto} deseas agregar?")
         
