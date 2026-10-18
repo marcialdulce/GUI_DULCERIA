@@ -91,37 +91,37 @@ class ControladorDulceria:
                     print(f"Nombre del hilo: {self.hilo_factura.get_nombre()}")
                     print(f"Prioridad: {self.hilo_factura.get_prioridad()}")
 
-                    self.hilo_factura.start()               
-
+                    self.hilo_factura.start()
+                    
+                    # CREACIÓN DEL RUNNABLE (Pasando función al target)
+                    # Este es el equivalente  al Runnable de Java: separar la tarea del hilo
+                    
+                    self.hilo_secundario = threading.Thread(
+                        target=self._tarea_notificar_fin, 
+                        args=(nombre_archivo, self.vista.pantallas["MenuPrincipal"].contenido.winfo_children()[0]),
+                        daemon=True)
+                    
+                    self.hilo_secundario.start()
+                
                     mensaje += "\n Factura generándose en segundo plano..."
 
             messagebox.showinfo("Ticket Cobrado", mensaje)
-
-            # CREACIÓN DEL RUNNABLE (Pasando función al target)
-            # Este es el equivalente  al Runnable de Java: separar la tarea del hilo
-
-            self.hilo_secundario = threading.Thread(
-                target=self._tarea_notificar_fin, 
-                args=(nombre_archivo, self.vista.pantallas["MenuPrincipal"].contenido.winfo_children()[0]),
-                daemon=True)
-            
-            self.hilo_secundario.start()
-            
-            # join(): Esperamos un máximo de 4 segundos a que la factura termine para reportar
-            self.hilo_factura.join(timeout=4)
-            
+           
 
     def _tarea_notificar_fin(self, nombre_archivo, panel_ventas):
             # Esta funcion es el "Runnable". Se ejecuta de forma paralela
             self.hilo_factura.join() # Espera a que el hilo de la factura muera (DEAD)
 
             if self.hilo_factura.exito:
-              mensaje = f" Listo: {nombre_archivo}"
+                mensaje = f" Listo: {nombre_archivo}"
             # Usamos after(0, ...) para actualizar la interfaz de forma segura
-              self.vista.after(0, lambda: panel_ventas.actualizar_estado_factura(mensaje, "green"))
+                self.vista.after(0, lambda: panel_ventas.actualizar_estado_factura(mensaje, "green"))
             elif self.hilo_factura.error:
-              mensaje = " Error al generar PDF"
-              self.vista.after(0, lambda: panel_ventas.actualizar_estado_factura(mensaje, "red"))
+                mensaje = " Error al generar PDF"
+                self.vista.after(0, lambda: panel_ventas.actualizar_estado_factura(mensaje, "red"))
+
+              # Ventana emergente para mostrar el error
+                self.vista.after(0, lambda e=self.hilo_factura.error: messagebox.showerror("Error de Facturación", f"No se pudo guardar el PDF:\n{e}"))
     
         
     def procesar_agregar(self, nombre_producto):

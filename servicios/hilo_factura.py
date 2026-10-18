@@ -72,9 +72,15 @@ class HiloFactura(threading.Thread):
 
             self.exito = True
             print(f"[{self.name}] Factura generada: {self.nombre_archivo}")
+        except FileNotFoundError:
+            self.error = "La carpeta 'facturas' no existe o fue movida. Por favor, créala de nuevo."
+            print(f"[{self.name}] Error: Carpeta no encontrada")
+        except PermissionError:
+            self.error = "No hay permisos para guardar el archivo. Verifica que no esté abierto en otro programa."
+            print(f"[{self.name}] Error: Permiso denegado")
         except Exception as e:
             self.error = str(e)
-            print(f"[{self.name}] Error: {e}")
+            print(f"[{self.name}] Error inesperado: {e}")
 
     # --- Métodos solicitados  ---
 
