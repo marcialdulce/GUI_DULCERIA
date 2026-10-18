@@ -1,5 +1,6 @@
 import tkinter as tk
 import os
+import threading
 from tkinter import messagebox, simpledialog
 from datetime import datetime
 from reportlab.pdfgen import canvas
@@ -68,32 +69,54 @@ class ControladorDulceria:
             if tipo_pago == "Efectivo":
                 mensaje += f"Cambio a entregar: ${cambio:.2f}\n"
             
-            # Si el usuario solicitó factura
+                # Si el usuario solicitó factura
             if datos_factura and datos_factura.get("requiere"):
-                nombre_archivo = f"Factura_{datos_factura['rfc']}.pdf"
-                razon_social = f"{datos_factura.get('nombre','')} {datos_factura.get('apellidos','')}".strip()
+                    nombre_archivo = f"Factura_{datos_factura['rfc']}.pdf"
+                    razon_social = f"{datos_factura.get('nombre','')} {datos_factura.get('apellidos','')}".strip()
 
-                self.hilo_factura = HiloFactura(          # crear
-                    nombre_archivo=nombre_archivo,
-                    rfc=datos_factura['rfc'],
-                    razon_social=razon_social,
-                    total=total,
-                    carrito=carrito_respaldo,
-                    metodo_pago=tipo_pago,
-                    pago=pago,
-                    cambio=cambio
-                )
-                self.hilo_factura.start()                  # start()
-                self.hilo_factura.join(timeout=3)          # join() — esperar 3s max
-                self.hilo_factura.set_prioridad(7)         # setPriority()
+                    # CREACIÓN DEL THREAD (Extendiendo la clase)
+                    self.hilo_factura = HiloFactura(         
+                        nombre_archivo=nombre_archivo,
+                        rfc=datos_factura['rfc'],
+                        razon_social=razon_social,
+                        total=total,
+                        carrito=carrito_respaldo,
+                        metodo_pago=tipo_pago,
+                        pago=pago,
+                        cambio=cambio
+                    )
 
-                if self.hilo_factura.exito:
-                    mensaje += f"\n Factura generada: {nombre_archivo}"
-                else:
-                    mensaje += f"\n Error al generar factura: {self.hilo_factura.error}"
+                    # Metodos de control
+                    self.hilo_factura.set_prioridad(9)
+                    print(f"Nombre del hilo: {self.hilo_factura.get_nombre()}")
+                    print(f"Prioridad: {self.hilo_factura.get_prioridad()}")
+
+                    self.hilo_factura.start()                  # start()
+
+                    mensaje += "\n Factura generándose en segundo plano..."
 
             messagebox.showinfo("Ticket Cobrado", mensaje)
 
+            # CREACIÓN DEL RUNNABLE (Pasando función al target)
+            # Este es el equivalente  al Runnable de Java: separar la tarea del hilo
+            self.hilo_secundario = threading.Thread(
+                target=self._tarea_notificar_fin, 
+                args=(nombre_archivo,),
+                daemon=True
+            )
+            self.hilo_secundario.start()
+            
+            # join(): Esperamos un máximo de 4 segundos a que la factura termine para reportar
+            self.hilo_factura.join(timeout=4)
+
+    def _tarea_notificar_fin(self, nombre_archivo):
+            # Esta funcion es el "Runnable". Se ejecuta de forma paralela
+            self.hilo_factura.join() # Espera a que el hilo de la factura muera (DEAD)
+            if self.hilo_factura.exito:
+                print(f"Éxito: {nombre_archivo} generado.")
+            elif self.hilo_factura.error:
+                print(f"Error: {self.hilo_factura.error}")
+    
         
     def procesar_agregar(self, nombre_producto):
         cantidad = simpledialog.askinteger("Cantidad", f"¿Cuantos {nombre_producto} deseas agregar?")
@@ -106,6 +129,7 @@ class ControladorDulceria:
             elif resultado == "no_encontrado":
                 messagebox.showerror("Error", "Producto no encontrado")
 
+        
     def obtener_datos_ventas(self):
         total = self.modelo.calcular_total()
         # Retorna el inventario, el carrito y el total
