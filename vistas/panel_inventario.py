@@ -287,6 +287,15 @@ class PanelInventario(tk.Frame):
                         ).grid(row=6, column=1, sticky="w")
 
             def guardar():
+
+                 # Obtenemos el nombre del proveedor que el usuario eligio en el ComboBox
+                nombre_prov_seleccionado = combo_prov.get()
+                
+                # Buscamos su ID 
+                # Si el usuario dejó "— Sin proveedor —", el ID será None
+                proveedor_id = mapa_prov.get(nombre_prov_seleccionado)
+
+
                 ok, msg = self.controlador.procesar_nuevo_producto(
                     entry_nombre.get(),
                     entry_marca.get(),

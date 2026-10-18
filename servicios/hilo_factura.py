@@ -7,6 +7,7 @@ import threading
 import time
 from vistas.generador_tickets import generar_ticket_pdf
 
+lock_pdf = threading.Lock()
 
 class HiloFactura(threading.Thread):
     """Genera una factura PDF en segundo plano para no bloquear la UI"""
@@ -37,6 +38,7 @@ class HiloFactura(threading.Thread):
 
     # run()  el cuerpo del hilo
     def run(self):
+
           # Simulamos que ReportLab tarda 3 segundos en preparar el PDF
           # Hacemos 30 iteraciones de 0.1 segundos para poder pausar o detener el hilo en el proceso
         try:
@@ -52,7 +54,9 @@ class HiloFactura(threading.Thread):
 
                 # Pausa real de 0.1 segundos
                 time.sleep(0.1)
-
+        
+            # Si otro hilo esta en uso, este hilo esperara su turno para otro proceso
+            with lock_pdf:
                 # Simulamos trabajo de ReportLab
                 generar_ticket_pdf(
                 nombre_archivo=self.nombre_archivo,
@@ -63,10 +67,10 @@ class HiloFactura(threading.Thread):
                 metodo_pago=self.metodo_pago,
                 pago=self.pago,
                 cambio=self.cambio
-            )
-                self.exito = True
-                break # Termina y pasa a DEAD
+                )
+                
 
+            self.exito = True
             print(f"[{self.name}] Factura generada: {self.nombre_archivo}")
         except Exception as e:
             self.error = str(e)
