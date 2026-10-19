@@ -1,3 +1,5 @@
+import threading
+import time
 import tkinter as tk
 from tkinter import ttk, messagebox
 from vistas import estilos
@@ -36,18 +38,28 @@ class PanelInventario(tk.Frame):
         self.combo_categoria.pack(side="left")
         self.combo_categoria.bind("<<ComboboxSelected>>", lambda e: self.notificar_filtros())
 
+        # BOTÓN: Hilo 4 - Solicitud de Reposición a Proveedores Dulce
+        self.btn_hilo_reposicion = tk.Button(
+            barra_filtros, 
+            text="⚡ SOLICITAR REPOSICIÓN ", 
+            bg="#E67E22", fg=estilos.BLANCO, 
+            font=("Arial", 9, "bold"), 
+            command=self.iniciar_hilo_reposicion
+        )
+        self.btn_hilo_reposicion.pack(side="right", padx=5, pady=5)
+
         btn_nuevo = tk.Button(
             barra_filtros, text="NUEVO PRODUCTO",
             bg="#27AE60", fg=estilos.BLANCO,
             font=("Arial", 9, "bold"),
             command=self.abrir_ventana_nuevo_producto
         )
-        btn_nuevo.pack(side="right", padx=10, pady=5)
+        btn_nuevo.pack(side="right", padx=5, pady=5)
 
         # Botón integrador dentro de la misma pestaña para ver pedidos
         btn_pedidos = tk.Button(barra_filtros, text="📦 VER / CANCELAR PEDIDOS", bg="#2C3E50", fg=estilos.BLANCO, 
                                 font=("Arial", 9, "bold"), command=self.abrir_ventana_pedidos)
-        btn_pedidos.pack(side="right", padx=10, pady=5)
+        btn_pedidos.pack(side="right", padx=5, pady=5)
 
         # Configuración de estilos para los colores de las filas en el Treeview principal
         self.style = ttk.Style()
@@ -74,6 +86,64 @@ class PanelInventario(tk.Frame):
 
         self.notificar_filtros()
 
+    # =========================================================================
+    # LÓGICA Y DESARROLLO DEL HILO (HILO 4)
+    # =========================================================================
+    def iniciar_hilo_reposicion(self):
+        """Inicia el hilo para procesar la reposición automática sin congelar la GUI."""
+        self.btn_hilo_reposicion.config(state="disabled", text="⏳ PROCESANDO REPOSICIÓN...")
+        
+        hilo = threading.Thread(target=self._tarea_reposicion_background)
+        hilo.daemon = True
+        hilo.start()
+
+    def _tarea_reposicion_background(self):
+        """Método ejecutado en el hilo secundario (Background Thread)."""
+        productos = self.controlador.procesar_filtro_inventario("", "Todas", "Todas")
+        
+        # Simulación de proceso pesado (comunicación o análisis de reposición)
+        time.sleep(2)
+
+        nuevos_pedidos_creados = 0
+
+        for prod in productos:
+            nombre = prod["nombre"]
+            stock = prod["stock"]
+
+            # Evaluamos los productos que están por agotarse (stock < 15)
+            if stock < 15:
+                pedido_existente = next(
+                    (p for p in self.controlador.pedidos_activos if p["producto"] == nombre and p["estado"] == "Pendiente"), 
+                    None
+                )
+
+                if not pedido_existente:
+                    cantidad_a_pedir = 50 - stock
+                    nuevo_id = max([p["id"] for p in self.controlador.pedidos_activos], default=0) + 1
+                    
+                    self.controlador.pedidos_activos.append({
+                        "id": nuevo_id,
+                        "producto": nombre,
+                        "cantidad": cantidad_a_pedir,
+                        "estado": "Pendiente"
+                    })
+                    nuevos_pedidos_creados += 1
+
+        self.after(0, lambda: self._finalizar_hilo_reposicion(nuevos_pedidos_creados))
+
+    def _finalizar_hilo_reposicion(self, creados):
+        """Actualiza la interfaz de usuario cuando el hilo termina su ejecución."""
+        self.btn_hilo_reposicion.config(state="normal", text="⚡ SOLICITAR REPOSICIÓN (HILO)")
+        self.notificar_filtros()
+
+        if creados > 0:
+            messagebox.showinfo("Reposición Completada", f"Se han generado automáticamente {creados} órdenes de reposición para productos bajos o agotados.")
+        else:
+            messagebox.showinfo("Sin Cambios", "No se encontraron productos por agotarse o ya tienen un pedido pendiente activo.")
+
+    # =========================================================================
+    # MÉTODOS EXISTENTES
+    # =========================================================================
     def notificar_filtros(self):
         texto = self.txt_buscar_inv.get().lower()
         marca = self.combo_marca.get()
@@ -117,8 +187,8 @@ class PanelInventario(tk.Frame):
                 prod["proveedor"], accion
             ), tags=(tag,))
 
-        # Aplicamos colores de fondo a las filas (cambiamos pendiente a azul pastel suave)
-        self.tabla_inv.tag_configure("pendiente", background="#D4E6F1") # Azul pastel suave para pedidos en curso
+        # Aplicamos colores de fondo a las filas
+        self.tabla_inv.tag_configure("pendiente", background="#D4E6F1") # Azul pastel suave
         self.tabla_inv.tag_configure("agotado", background="#FADBD8")    # Rojo claro
         self.tabla_inv.tag_configure("bajo", background="#FCF3CF")       # Amarillo claro
         self.tabla_inv.tag_configure("optimo", background="#D4EFDF")     # Verde claro
@@ -154,7 +224,6 @@ class PanelInventario(tk.Frame):
         def confirmar_envio():
             cantidad = int(txt_cantidad.get())
             
-            # Verificar si ya existe un pedido pendiente para este producto para acumular la cantidad
             pedido_existente = next((p for p in self.controlador.pedidos_activos if p["producto"] == producto and p["estado"] == "Pendiente"), None)
             
             if pedido_existente:
@@ -171,7 +240,7 @@ class PanelInventario(tk.Frame):
                 messagebox.showinfo("Éxito", f"Se han solicitado {cantidad} unidades de {producto}.")
             
             dialogo.destroy()
-            self.notificar_filtros() # Refrescar la tabla principal para que se pinte con el nuevo tono
+            self.notificar_filtros()
 
         btn_enviar = tk.Button(dialogo, text="Confirmar Pedido", bg="#3A8D96", fg=estilos.BLANCO, font=("Arial", 9, "bold"), command=confirmar_envio)
         btn_enviar.pack(pady=15)
@@ -186,15 +255,14 @@ class PanelInventario(tk.Frame):
 
         tk.Label(ventana_pedidos, text="LISTA DE PEDIDOS A PROVEEDORES", font=("Arial", 11, "bold"), bg=estilos.FONDO).pack(pady=10)
 
-        # Configurar estilo para que la fila seleccionada se pinte con un color distintivo claramente visible
         style_pedidos = ttk.Style()
         style_pedidos.map("Treeview", background=[('selected', '#2980B9')], foreground=[('selected', 'white')])
 
         cols_pedidos = ("ID", "PRODUCTO", "CANTIDAD", "ESTADO")
         tabla_pedidos = ttk.Treeview(ventana_pedidos, columns=cols_pedidos, show="headings", height=8, selectmode="browse")
         for col in cols_pedidos:
-                tabla_pedidos.heading(col, text=col)
-                tabla_pedidos.column(col, anchor="center", width=130)
+            tabla_pedidos.heading(col, text=col)
+            tabla_pedidos.column(col, anchor="center", width=130)
         tabla_pedidos.pack(pady=5, padx=10, fill="both", expand=True)
 
         def actualizar_tabla_pedidos():
@@ -214,103 +282,96 @@ class PanelInventario(tk.Frame):
             item = tabla_pedidos.item(seleccion)
             id_pedido = item["values"][0]
             
-            # Filtrar para eliminar el pedido cancelado
             self.controlador.pedidos_activos = [p for p in self.controlador.pedidos_activos if p["id"] != id_pedido]
             messagebox.showinfo("Cancelado", f"El pedido #{id_pedido} ha sido cancelado con éxito.")
             
             actualizar_tabla_pedidos()
-            self.notificar_filtros() # Refrescar la tabla de inventario principal para quitar el color si ya no hay pedidos
+            self.notificar_filtros()
 
         btn_cancelar = tk.Button(ventana_pedidos, text="❌ Cancelar Pedido Seleccionado", bg="#C0392B", fg=estilos.BLANCO, 
                                  font=("Arial", 9, "bold"), command=cancelar_pedido_seleccionado)
         btn_cancelar.pack(pady=12)
 
     def abrir_ventana_nuevo_producto(self):
-            """Formulario emergente para dar de alta un producto."""
-            modal = tk.Toplevel(self)
-            modal.title("Nuevo Producto")
-            modal.geometry("420x460")
-            modal.config(bg=estilos.FONDO)
-            modal.grab_set()
+        """Formulario emergente para dar de alta un producto."""
+        modal = tk.Toplevel(self)
+        modal.title("Nuevo Producto")
+        modal.geometry("420x460")
+        modal.config(bg=estilos.FONDO)
+        modal.grab_set()
 
-            tk.Label(modal, text="ALTA DE PRODUCTO",
-                    bg=estilos.FONDO, font=("Arial", 12, "bold")).pack(pady=15)
+        tk.Label(modal, text="ALTA DE PRODUCTO",
+                bg=estilos.FONDO, font=("Arial", 12, "bold")).pack(pady=15)
 
-            campos = tk.Frame(modal, bg=estilos.FONDO)
-            campos.pack(pady=10)
+        campos = tk.Frame(modal, bg=estilos.FONDO)
+        campos.pack(pady=10)
 
-            # Nombre
-            tk.Label(campos, text="Nombre:", bg=estilos.FONDO).grid(row=0, column=0, sticky="e", pady=5)
-            entry_nombre = tk.Entry(campos, width=25)
-            entry_nombre.grid(row=0, column=1, pady=5, padx=5)
+        # Nombre
+        tk.Label(campos, text="Nombre:", bg=estilos.FONDO).grid(row=0, column=0, sticky="e", pady=5)
+        entry_nombre = tk.Entry(campos, width=25)
+        entry_nombre.grid(row=0, column=1, pady=5, padx=5)
 
-            # Marca
-            tk.Label(campos, text="Marca:", bg=estilos.FONDO).grid(row=1, column=0, sticky="e", pady=5)
-            entry_marca = tk.Entry(campos, width=25)
-            entry_marca.grid(row=1, column=1, pady=5, padx=5)
+        # Marca
+        tk.Label(campos, text="Marca:", bg=estilos.FONDO).grid(row=1, column=0, sticky="e", pady=5)
+        entry_marca = tk.Entry(campos, width=25)
+        entry_marca.grid(row=1, column=1, pady=5, padx=5)
 
-            # Categoría
-            tk.Label(campos, text="Categoría:", bg=estilos.FONDO).grid(row=2, column=0, sticky="e", pady=5)
-            combo_cat = ttk.Combobox(campos, values=["Gomitas", "Chocolates", "Frituras", "General"],
-                                    width=22, state="readonly")
-            combo_cat.current(0)
-            combo_cat.grid(row=2, column=1, pady=5, padx=5)
+        # Categoría
+        tk.Label(campos, text="Categoría:", bg=estilos.FONDO).grid(row=2, column=0, sticky="e", pady=5)
+        combo_cat = ttk.Combobox(campos, values=["Gomitas", "Chocolates", "Frituras", "General"],
+                                width=22, state="readonly")
+        combo_cat.current(0)
+        combo_cat.grid(row=2, column=1, pady=5, padx=5)
 
-            # Precio
-            tk.Label(campos, text="Precio ($):", bg=estilos.FONDO).grid(row=3, column=0, sticky="e", pady=5)
-            entry_precio = tk.Entry(campos, width=25)
-            entry_precio.grid(row=3, column=1, pady=5, padx=5)
+        # Precio
+        tk.Label(campos, text="Precio ($):", bg=estilos.FONDO).grid(row=3, column=0, sticky="e", pady=5)
+        entry_precio = tk.Entry(campos, width=25)
+        entry_precio.grid(row=3, column=1, pady=5, padx=5)
 
-            # Stock
-            tk.Label(campos, text="Stock inicial:", bg=estilos.FONDO).grid(row=4, column=0, sticky="e", pady=5)
-            entry_stock = tk.Entry(campos, width=25)
-            entry_stock.grid(row=4, column=1, pady=5, padx=5)
+        # Stock
+        tk.Label(campos, text="Stock inicial:", bg=estilos.FONDO).grid(row=4, column=0, sticky="e", pady=5)
+        entry_stock = tk.Entry(campos, width=25)
+        entry_stock.grid(row=4, column=1, pady=5, padx=5)
 
-                    # Proveedor (ComboBox)
-            tk.Label(campos, text="Proveedor:",
-                    bg=estilos.FONDO).grid(row=5, column=0, sticky="e", pady=5)
+        # Proveedor (ComboBox)
+        tk.Label(campos, text="Proveedor:",
+                bg=estilos.FONDO).grid(row=5, column=0, sticky="e", pady=5)
 
-            proveedores = self.controlador.obtener_proveedores()
-            opciones = ["— Sin proveedor —"] + [p["nombre"] for p in proveedores]
-            mapa_prov = {p["nombre"]: p["id"] for p in proveedores}
+        proveedores = self.controlador.obtener_proveedores()
+        opciones = ["— Sin proveedor —"] + [p["nombre"] for p in proveedores]
+        mapa_prov = {p["nombre"]: p["id"] for p in proveedores}
 
-            combo_prov = ttk.Combobox(campos, values=opciones,
-                                    width=22, state="readonly")
-            combo_prov.current(0)
-            combo_prov.grid(row=5, column=1, pady=5, padx=5)
+        combo_prov = ttk.Combobox(campos, values=opciones,
+                                width=22, state="readonly")
+        combo_prov.current(0)
+        combo_prov.grid(row=5, column=1, pady=5, padx=5)
 
-            if not proveedores:
-                tk.Label(campos,
-                        text="(Registra proveedores en la pestaña PROVEEDORES)",
-                        bg=estilos.FONDO, fg="#C0392B",
-                        font=("Arial", 8, "italic")
-                        ).grid(row=6, column=1, sticky="w")
+        if not proveedores:
+            tk.Label(campos,
+                    text="(Registra proveedores en la pestaña PROVEEDORES)",
+                    bg=estilos.FONDO, fg="#C0392B",
+                    font=("Arial", 8, "italic")
+                    ).grid(row=6, column=1, sticky="w")
 
-            def guardar():
+        def guardar():
+            nombre_prov_seleccionado = combo_prov.get()
+            proveedor_id = mapa_prov.get(nombre_prov_seleccionado)
 
-                 # Obtenemos el nombre del proveedor que el usuario eligio en el ComboBox
-                nombre_prov_seleccionado = combo_prov.get()
-                
-                # Buscamos su ID 
-                # Si el usuario dejó "— Sin proveedor —", el ID será None
-                proveedor_id = mapa_prov.get(nombre_prov_seleccionado)
+            ok, msg = self.controlador.procesar_nuevo_producto(
+                entry_nombre.get(),
+                entry_marca.get(),
+                combo_cat.get(),
+                entry_precio.get(),
+                entry_stock.get(),
+                proveedor_id
+            )
+            if ok:
+                messagebox.showinfo("Éxito", msg, parent=modal)
+                modal.destroy()
+                self.notificar_filtros()
+            else:
+                messagebox.showerror("Error", msg, parent=modal)
 
-
-                ok, msg = self.controlador.procesar_nuevo_producto(
-                    entry_nombre.get(),
-                    entry_marca.get(),
-                    combo_cat.get(),
-                    entry_precio.get(),
-                    entry_stock.get(),
-                    proveedor_id
-                )
-                if ok:
-                    messagebox.showinfo("Éxito", msg, parent=modal)
-                    modal.destroy()
-                    self.notificar_filtros()   #  refresca la tabla al instante
-                else:
-                    messagebox.showerror("Error", msg, parent=modal)
-
-            tk.Button(modal, text="GUARDAR", bg="#27AE60", fg="white",
-                    font=("Arial", 10, "bold"), width=15,
-                    command=guardar).pack(pady=20)
+        tk.Button(modal, text="GUARDAR", bg="#27AE60", fg="white",
+                font=("Arial", 10, "bold"), width=15,
+                command=guardar).pack(pady=20)
