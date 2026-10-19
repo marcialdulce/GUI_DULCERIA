@@ -230,11 +230,11 @@ class PanelVentas(tk.Frame):
                 "rfc": getattr(self, "factura_rfc", "")
             }
 
+        self.controlador.procesar_cobro_avanzado(detalle_pago, datos_factura)
+        self.quiere_facturar.set(False)
+
         # Si el pago es con tarjeta, mostramos la ventana emergente de cobro realizado
         if metodo == "Tarjeta":
-            # Primero ejecutamos el cobro en el controlador para que procese el inventario y limpie el ticket internamente
-            if hasattr(self.controlador, "procesar_cobro_avanzado"):
-                self.controlador.procesar_cobro_avanzado(detalle_pago, datos_factura)
 
             modal_cobro = tk.Toplevel(self)
             modal_cobro.title("Cobro con Tarjeta")
@@ -257,17 +257,11 @@ class PanelVentas(tk.Frame):
 
             def aceptar_cobro():
                 modal_cobro.destroy()
-                self.quiere_facturar.set(False)
                 # Refrescamos la pantalla para que dibuje el ticket vacío que el controlador ya limpió
                 self.refrescar_pantalla()
 
             tk.Button(modal_cobro, text="ACEPTAR", bg="#F4D03F", font=("Arial", 9, "bold"), relief="flat", command=aceptar_cobro).pack(pady=15)
         else:
-            # Flujo normal para efectivo
-            if hasattr(self.controlador, "procesar_cobro_avanzado"):
-                self.controlador.procesar_cobro_avanzado(detalle_pago, datos_factura)
-            
-            self.quiere_facturar.set(False)
             self.refrescar_pantalla()
 
     def dibujar_catalogo(self, productos_disponibles):

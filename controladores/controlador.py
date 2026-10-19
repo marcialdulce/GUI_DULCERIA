@@ -2,7 +2,7 @@ import tkinter as tk
 import os
 import queue
 import threading
-from tkinter import messagebox, simpledialog
+from tkinter import messagebox, simpledialog, filedialog
 from datetime import datetime
 from reportlab.pdfgen import canvas
 from modelos.modelo import ModeloDulceria
@@ -57,101 +57,125 @@ class ControladorDulceria:
             )
             self.vista.pantallas["PantallaLogin"].entry_pass.delete(0, 'end')
 
+
     def procesar_cobro_avanzado(self, tipo_pago, datos_factura):
         total = self.modelo.calcular_total()
-        
+    
         if total == 0:
             messagebox.showwarning("Aviso", "El ticket está vacío. Agrega productos primero.")
             return
 
-        pago = total  # Si es tarjeta, se cobra el monto exacto por defecto
-        
-        # Si paga en efectivo, pedimos la cantidad con un cuadro de diálogo
-        if tipo_pago == "Efectivo":
-            pago = simpledialog.askfloat("Cobrar en Efectivo", f"Total a cobrar: ${total:.2f}\n¿Con cuánto efectivo paga el cliente?")
-            if pago is None:  # Si el usuario presiona "Cancelar"
-                return
+        # 1. Pedir el pago (Función externa)
+        pago = self._solicitar_pago(total, tipo_pago)
+        if pago is None: 
+            return
 
         carrito_respaldo = self.modelo.ticket_actual.copy()
-
-        # Procesamos el cobro 
         exito, cambio = self.modelo.procesar_cobro(pago)
         
         if exito:
+            self.modelo.guardar_inventario() 
 
-            self.modelo.guardar_inventario() # Persiste el inventario tras descontar el stock
+            # 2. Registrar historial (Función externa)
+            aviso_historial = self._registrar_venta_historial(tipo_pago, total, carrito_respaldo, datos_factura)
 
-            # Registra la venta en el historial (lo que luego lee la tarea en segundo plano)
-            aviso_historial = ""
-            try:
-                self.repo_ventas.registrar(
-                    metodo_pago=tipo_pago,
-                    total=total,
-                    articulos=carrito_respaldo,
-                    facturado=bool(datos_factura and datos_factura.get("requiere")),
-                )
-            except OSError as e:
-                # El cobro ya se hizo; solo avisamos que no quedó en el historial
-                aviso_historial = f"\n\nAviso: la venta no se pudo guardar en el historial ({e.strerror or e})."
+            # 3. Construir mensaje (Función externa)
+            mensaje = self._construir_mensaje_exito(tipo_pago, cambio)
 
-            mensaje = f"¡Venta procesada con éxito!\n\nMétodo de pago: {tipo_pago}\n"
-            if tipo_pago == "Efectivo":
-                mensaje += f"Cambio a entregar: ${cambio:.2f}\n"
+            messagebox.showinfo("Ticket Cobrado", mensaje + aviso_historial)  
             
-                # Si el usuario solicitó factura
+            # 4. Iniciar factura (Función externa)
             if datos_factura and datos_factura.get("requiere"):
-                    nombre_archivo = f"Factura_{datos_factura['rfc']}.pdf"
-                    razon_social = f"{datos_factura.get('nombre','')} {datos_factura.get('apellidos','')}".strip()
+                self._iniciar_hilo_factura(datos_factura, total, carrito_respaldo, tipo_pago, pago, cambio)
+                mensaje += "\n Factura generándose en segundo plano..."
 
-                    # CREACIÓN DEL THREAD (Extendiendo la clase)
-                    self.hilo_factura = HiloFactura(         
-                        nombre_archivo=nombre_archivo,
-                        rfc=datos_factura['rfc'],
-                        razon_social=razon_social,
-                        total=total,
-                        carrito=carrito_respaldo,
-                        metodo_pago=tipo_pago,
-                        pago=pago,
-                        cambio=cambio
-                    )
+                         
 
-                    # Metodos de control
-                    self.hilo_factura.set_prioridad(9)
-                    print(f"Nombre del hilo: {self.hilo_factura.get_nombre()}")
-                    print(f"Prioridad: {self.hilo_factura.get_prioridad()}")
+    def _solicitar_pago(self, total, tipo_pago):
+        """Pide el efectivo si es necesario. Devuelve el monto o None si cancela."""
+        if tipo_pago == "Efectivo":
+            return simpledialog.askfloat("Cobrar en Efectivo", f"Total a cobrar: ${total:.2f}\n¿Con cuánto efectivo paga el cliente?")
+        return total
 
-                    self.hilo_factura.start()
-                    
-                    # CREACIÓN DEL RUNNABLE (Pasando función al target)
-                    # Este es el equivalente  al Runnable de Java: separar la tarea del hilo
-                    
-                    self.hilo_secundario = threading.Thread(
-                        target=self._tarea_notificar_fin, 
-                        args=(nombre_archivo, self.vista.pantallas["MenuPrincipal"].contenido.winfo_children()[0]),
-                        daemon=True)
-                    
-                    self.hilo_secundario.start()
-                
-                    mensaje += "\n Factura generándose en segundo plano..."
+    def _registrar_venta_historial(self, tipo_pago, total, carrito, datos_factura):
+        """Intenta guardar en el JSON y devuelve un aviso si falla."""
+        try:
+            self.repo_ventas.registrar(
+                metodo_pago=tipo_pago,
+                total=total,
+                articulos=carrito,
+                facturado=bool(datos_factura and datos_factura.get("requiere")),
+            )
+            return ""
+        except OSError as e:
+            return f"\n\nAviso: la venta no se pudo guardar en el historial ({e.strerror or e})."
 
-            messagebox.showinfo("Ticket Cobrado", mensaje + aviso_historial)
+    def _construir_mensaje_exito(self, tipo_pago, cambio):
+        """Crea el texto del ticket cobrado."""
+        mensaje = f"¡Venta procesada con éxito!\n\nMétodo de pago: {tipo_pago}\n"
+        if tipo_pago == "Efectivo":
+            mensaje += f"Cambio a entregar: ${cambio:.2f}\n"
+        return mensaje
+
+    def _iniciar_hilo_factura(self,  datos_factura, total, carrito, tipo_pago, pago, cambio):
+        """Abre el diálogo para guardar el PDF y lanza el Thread y el Runnable."""
+        nombre_archivo = f"Factura_{datos_factura['rfc']}.pdf"
+        
+        ruta_completa_pdf = filedialog.asksaveasfilename(
+            title="Guardar Factura",
+            defaultextension=".pdf",
+            initialfile=nombre_archivo,
+            filetypes=[("Archivos PDF", "*.pdf")]
+        )
+
+        if not ruta_completa_pdf:
+            messagebox.showwarning("Aviso", "Se canceló el guardado de la factura.")
+            return
+
+        razon_social = f"{datos_factura.get('nombre','')} {datos_factura.get('apellidos','')}".strip()
+
+        # 1. Hilo de la Factura
+        self.hilo_factura = HiloFactura(       
+            ruta_completa=ruta_completa_pdf,
+            rfc=datos_factura['rfc'],
+            razon_social=razon_social,
+            total=total,
+            carrito=carrito,
+            metodo_pago=tipo_pago,
+            pago=pago,
+            cambio=cambio
+        )
+        self.hilo_factura.set_prioridad(9)
+        print(f"Nombre del hilo: {self.hilo_factura.get_nombre()}")
+        print(f"Prioridad: {self.hilo_factura.get_prioridad()}")
+        self.hilo_factura.start()
+        
+        # 2. Runnable (Notificador)
+        self.hilo_secundario = threading.Thread(
+            target=self._tarea_notificar_fin, 
+            args=(self.hilo_factura, ruta_completa_pdf, self.vista.pantallas["MenuPrincipal"].contenido.winfo_children()[0]),
+            daemon=True
+        )
+        self.hilo_secundario.start()
+
+          
            
 
-    def _tarea_notificar_fin(self, nombre_archivo, panel_ventas):
+    def _tarea_notificar_fin(self, hilo_factura, nombre_archivo, panel_ventas):
             # Esta funcion es el "Runnable". Se ejecuta de forma paralela
-            self.hilo_factura.join() # Espera a que el hilo de la factura muera (DEAD)
+            hilo_factura.join() # Espera a que el hilo de la factura muera (DEAD)
 
-            if self.hilo_factura.exito:
-                mensaje = f" Listo: {nombre_archivo}"
-            # Usamos after(0, ...) para actualizar la interfaz de forma segura
-                self.vista.after(0, lambda: panel_ventas.actualizar_estado_factura(mensaje, "green"))
-            elif self.hilo_factura.error:
-                mensaje = " Error al generar PDF"
-                self.vista.after(0, lambda: panel_ventas.actualizar_estado_factura(mensaje, "red"))
-
-              # Ventana emergente para mostrar el error
-                self.vista.after(0, lambda e=self.hilo_factura.error: messagebox.showerror("Error de Facturación", f"No se pudo guardar el PDF:\n{e}"))
-    
+            try:
+                if hilo_factura.exito:
+                    mensaje = f" Listo: {nombre_archivo}"
+                    self.vista.after(0, lambda: panel_ventas.actualizar_estado_factura(mensaje, "green"))
+                elif hilo_factura.error:
+                    mensaje = " Error al generar PDF"
+                    self.vista.after(0, lambda: panel_ventas.actualizar_estado_factura(mensaje, "red"))
+                    self.vista.after(0, lambda e=hilo_factura.error: messagebox.showerror("Error de Facturación", f"No se pudo guardar el PDF:\n{e}"))
+            except Exception as e:
+                # Si el usuario cambio de pestaña, el Label ya no existe y se ignora el error
+                print(f"No se pudo actualizar el label visual: {e}")
         
     # ========================================================
     # VENTAS EN SEGUNDO PLANO (Thread + Runnable)
@@ -163,8 +187,8 @@ class ControladorDulceria:
 
         self._cancelar_carga = threading.Event()
         # RUNNABLE: describe QUÉ se hace (leer y resumir las ventas)
-        tarea = TareaCargarVentas(self.repo_ventas, self.cola_tareas,
-                                  self._cancelar_carga, fecha_filtro)
+        tarea = TareaCargarVentas(self.repo_ventas, self.cola_tareas, self._cancelar_carga, fecha_filtro)
+
         # THREAD: es QUIEN lo ejecuta, para que el mainloop siga atendiendo la ventana
         self.hilo_carga = threading.Thread(target=tarea.run, name="HiloCargaVentas", daemon=True)
         self.estado_carga = {"estado": "cargando", "porcentaje": 0.0, "leidas": 0, "mensaje": ""}
