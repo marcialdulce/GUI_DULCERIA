@@ -1,26 +1,19 @@
 # Archivo: generador_tickets.py
 import os
+import subprocess
 from datetime import datetime
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
-def generar_ticket_pdf(nombre_archivo, rfc, razon_social, total, carrito_comprado, metodo_pago, pago, cambio):
+def generar_ticket_pdf(ruta_completa, rfc, razon_social, total, carrito_comprado, metodo_pago, pago, cambio):
 
-    # Definir el nombre de la carpeta destino
-    carpeta = "facturas"
     
-    # Verificar si la carpeta existe, si no, Python la crea automaticamente
-    if not os.path.exists(carpeta):
-        os.makedirs(carpeta)
-        
-    # Unir la carpeta con el nombre del archivo (
-    ruta_final = os.path.join(carpeta, nombre_archivo)
-
     # Obtener fecha y hora actual automáticamente
     fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     
     # Crear el documento PDF
-    c = canvas.Canvas(ruta_final, pagesize=letter)
+    c = canvas.Canvas(ruta_completa, pagesize=letter)
 
     # --- ELEMENTOS DE LA FACTURA ----
     
@@ -101,3 +94,11 @@ def generar_ticket_pdf(nombre_archivo, rfc, razon_social, total, carrito_comprad
         c.drawString(480, y-70, f"${cambio:.2f}")
 
     c.save()
+
+    try:
+        if os.name == 'nt':  # Windows
+            os.startfile(ruta_completa)
+        else:  # Linux / Mac
+            subprocess.Popen(['xdg-open', ruta_completa])
+    except Exception as e:
+        print(f"No se pudo abrir el PDF automáticamente: {e}")

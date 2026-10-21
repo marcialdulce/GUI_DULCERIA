@@ -12,13 +12,13 @@ lock_pdf = threading.Lock()
 class HiloFactura(threading.Thread):
     """Genera una factura PDF en segundo plano para no bloquear la UI"""
 
-    def __init__(self, nombre_archivo, rfc, razon_social, total,
+    def __init__(self, ruta_completa, rfc, razon_social, total,
                  carrito, metodo_pago, pago, cambio, prioridad=5):
         
         # setName(): Se usa name= para asignar el nombre del hilo
         super().__init__(name=f"HiloFactura-{rfc}", daemon=True)
 
-        self.nombre_archivo = nombre_archivo
+        self.ruta_completa = ruta_completa
         self.rfc = rfc
         self.razon_social = razon_social
         self.total = total
@@ -59,7 +59,7 @@ class HiloFactura(threading.Thread):
             with lock_pdf:
                 # Simulamos trabajo de ReportLab
                 generar_ticket_pdf(
-                nombre_archivo=self.nombre_archivo,
+                ruta_completa=self.ruta_completa,
                 rfc=self.rfc,
                 razon_social=self.razon_social,
                 total=self.total,
@@ -71,7 +71,7 @@ class HiloFactura(threading.Thread):
                 
 
             self.exito = True
-            print(f"[{self.name}] Factura generada: {self.nombre_archivo}")
+            print(f"[{self.name}] Factura generada: {self.ruta_completa}")
         except FileNotFoundError:
             self.error = "La carpeta 'facturas' no existe o fue movida. Por favor, créala de nuevo."
             print(f"[{self.name}] Error: Carpeta no encontrada")
