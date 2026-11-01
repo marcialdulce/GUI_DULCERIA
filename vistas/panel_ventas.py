@@ -6,9 +6,11 @@ CREDITO = "Crédito"
 EVENTO_RUEDA = "<MouseWheel>"
 
 class PanelVentas(tk.Frame):
-    def __init__(self, parent, controlador):
+    def __init__(self, parent, controlador, modo_punto_venta=False, ir_a_cobros=None):
         super().__init__(parent, bg=estilos.FONDO)
         self.controlador = controlador
+        self.modo_punto_venta = modo_punto_venta
+        self.ir_a_cobros = ir_a_cobros
 
         # Contenedor principal que se expande de forma responsiva al dividir pantalla
         contenedor_principal = tk.Frame(self, bg=estilos.FONDO)
@@ -80,6 +82,16 @@ class PanelVentas(tk.Frame):
         
         self.label_total = tk.Label(frame_total, text="$0.00", bg="#F4F4F4", font=("Arial", 12, "bold"))
         self.label_total.pack(side="right")
+        
+        if self.modo_punto_venta:
+            tk.Button(
+                panel_der, text="CONTINUAR A COBROS Y PAGOS", bg="#F4D03F",
+                font=("Arial", 10, "bold"), relief="flat", command=self.ir_a_cobros
+            ).pack(fill="x", padx=15, pady=15)
+        else:
+            self._crear_controles_cobro(panel_der)
+
+        self.refrescar_pantalla()
 
         # --------------OPCIONES DE COBRO Y FACTURA-------------
         self.metodo_pago = tk.StringVar(value="Efectivo")
@@ -127,6 +139,40 @@ class PanelVentas(tk.Frame):
         self.lbl_estado_factura.pack(side="left", padx=5)
 
         self.refrescar_pantalla()
+    
+    def _crear_controles_cobro(self, panel_der):
+        self.metodo_pago = tk.StringVar(value="Efectivo")
+        self.tipo_tarjeta = tk.StringVar(value="Crédito")
+        self.quiere_facturar = tk.BooleanVar(value=False)
+
+        frame_opciones = tk.Frame(panel_der, bg="#F4F4F4")
+        frame_opciones.pack(fill="x", padx=20, pady=5)
+
+        tk.Label(frame_opciones, text="Método de pago:", bg="#F4F4F4", font=("Arial", 9, "bold")).pack(anchor="w")
+        frame_radios = tk.Frame(frame_opciones, bg="#F4F4F4")
+        frame_radios.pack(anchor="w", pady=2)
+        
+        tk.Radiobutton(frame_radios, text="Efectivo", variable=self.metodo_pago, value="Efectivo", bg="#F4F4F4", command=self.toggle_metodo_pago).pack(side="left")
+        tk.Radiobutton(frame_radios, text="Tarjeta", variable=self.metodo_pago, value="Tarjeta", bg="#F4F4F4", command=self.toggle_metodo_pago).pack(side="left")
+
+        self.frame_tipo_tarjeta = tk.Frame(frame_opciones, bg="#F4F4F4")
+        tk.Radiobutton(self.frame_tipo_tarjeta, text=CREDITO, variable=self.tipo_tarjeta, value=CREDITO, bg="#F4F4F4").pack(side="left", padx=(0, 10))
+        tk.Radiobutton(self.frame_tipo_tarjeta, text="Débito", variable=self.tipo_tarjeta, value="Débito", bg="#F4F4F4").pack(side="left")
+
+        tk.Label(frame_opciones, text="¿El cliente requiere Factura?", bg="#F4F4F4", font=("Arial", 9, "bold")).pack(anchor="w", pady=(5,0))
+
+        frame_radios_fac = tk.Frame(frame_opciones, bg="#F4F4F4")
+        frame_radios_fac.pack(anchor="w")
+        tk.Radiobutton(frame_radios_fac, text="No", variable=self.quiere_facturar, value=False, bg="#F4F4F4", command=self.toggle_datos_factura).pack(side="left")
+        tk.Radiobutton(frame_radios_fac, text="Si", variable=self.quiere_facturar, value=True, bg="#F4F4F4", command=self.toggle_datos_factura).pack(side="left")
+
+        frame_botones = tk.Frame(panel_der, bg="#F4F4F4")
+        frame_botones.pack(fill="x", padx=10, pady=10)
+        tk.Button(frame_botones, text="COBRAR", bg="#F4D03F", font=("Arial", 10, "bold"), relief="flat", command=self.procesar_cobro_principal).pack(side="right", expand=True, fill="x", padx=5)
+       
+        self.lbl_estado_factura = tk.Label(frame_botones, text="", bg="#F4F4F4", fg="green", font=("Arial", 9, "bold"))
+        self.lbl_estado_factura.pack(side="left", padx=5)
+
 
     # FUNCIÓN PARA MOSTRAR/OCULTAR TIPO DE TARJETA
     def toggle_metodo_pago(self):
