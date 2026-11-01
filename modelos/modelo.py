@@ -83,7 +83,16 @@ class ModeloDulceria:
 
     def obtener_proveedor(self, proveedor_id):
         return next((p for p in self.proveedores if p["id"] == proveedor_id), None)
-
+    
+    def editar_proveedor(self, proveedor_id, telefono, correo):
+        prov = self.obtener_proveedor(proveedor_id)
+        if prov:
+            prov["telefono"] = telefono
+            prov["correo"] = correo
+            self.guardar_inventario()
+            return True
+        return False
+    
     def eliminar_proveedor(self, proveedor_id):
         self.proveedores = [p for p in self.proveedores if p["id"] != proveedor_id]
         for prod in self.inventario:
@@ -125,6 +134,26 @@ class ModeloDulceria:
         })
         self.guardar_inventario()
         return True
+    
+    def eliminar_producto(self, nombre_producto):
+        producto = next((p for p in self.inventario if p["nombre"] == nombre_producto), None)
+        if producto:
+            self.inventario.remove(producto)
+            self.guardar_inventario()
+            return True
+        return False
+
+    def editar_producto(self, nombre_original, nuevos_datos):
+        producto = next((p for p in self.inventario if p["nombre"] == nombre_original), None)
+        if producto:
+            producto["nombre"] = nuevos_datos.get("nombre", producto["nombre"])
+            producto["marca"] = nuevos_datos.get("marca", producto["marca"])
+            producto["categoria"] = nuevos_datos.get("categoria", producto["categoria"])
+            producto["precio"] = float(nuevos_datos.get("precio", producto["precio"]))
+            producto["stock"] = int(nuevos_datos.get("stock", producto["stock"]))
+            self.guardar_inventario()
+            return True
+        return False
 
     # ---------------- Usuarios y Roles ----------------
     def validar_usuario(self, usuario, password):

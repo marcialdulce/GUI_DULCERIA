@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import simpledialog
 from tkinter import messagebox
 from vistas import estilos
 
@@ -57,4 +58,26 @@ class PanelCierreCaja(tk.Frame):
             "La sesión se cerrará ahora."
         )
         messagebox.showinfo("Cierre de caja realizado", mensaje)
+        self.controlador.cerrar_sesion()
+        
+    def confirmar_cierre(self):
+        if not messagebox.askyesno("Confirmar cierre", "¿Deseas finalizar tu turno?"):
+            return
+        
+        # Pedimos al cajero que cuente el dinero
+        efectivo_fisico = simpledialog.askfloat("Arqueo de Caja", 
+            f"El sistema espera ${self.resumen['efectivo_esperado']:.2f} en efectivo.\n\n¿Cuánto dinero contaste físicamente en la caja?")
+        
+        if efectivo_fisico is None:
+            return # Canceló
+            
+        diferencia = efectivo_fisico - self.resumen['efectivo_esperado']
+        
+        if diferencia == 0:
+            messagebox.showinfo("Cierre Perfecto", "¡La caja cuadra a la perfección!")
+        elif diferencia > 0:
+            messagebox.showwarning("Sobrante", f"Hay un sobrante de ${diferencia:.2f} en la caja.")
+        else:
+            messagebox.showerror("Faltante", f"¡Cuidado! Hay un faltante de ${abs(diferencia):.2f} en la caja.")
+            
         self.controlador.cerrar_sesion()

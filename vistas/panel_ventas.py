@@ -91,6 +91,11 @@ class PanelVentas(tk.Frame):
             ).pack(fill="x", padx=15, pady=15)
         else:
             self._crear_controles_cobro(panel_der)
+            
+            tk.Button(
+                panel_der, text="CANCELAR TICKET", bg="#D9534F", fg="white",
+                font=("Arial", 9, "bold"), relief="flat", command=self.cancelar_ticket_actual
+            ).pack(fill="x", padx=15, pady=(0, 15))
 
         self.refrescar_pantalla()
 
@@ -367,3 +372,8 @@ class PanelVentas(tk.Frame):
 
     def actualizar_estado_factura(self, mensaje, color="green"):
         self.lbl_estado_factura.config(text=mensaje, fg=color)
+        
+    def cancelar_ticket_actual(self):
+        if messagebox.askyesno("Cancelar Ticket", "¿Estás seguro de que deseas vaciar el ticket actual?"):
+            self.controlador.modelo.ticket_actual.clear()
+            self.refrescar_pantalla()

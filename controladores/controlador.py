@@ -159,7 +159,10 @@ class ControladorDulceria:
     def iniciar_carga_ventas(self, fecha_filtro=""):
         if self.estado_carga["estado"] in ("cargando", "cancelando"): return False
         self._cancelar_carga = threading.Event()
-        tarea = TareaCargarVentas(self.repo_ventas, self.cola_tareas, self._cancelar_carga, fecha_filtro)
+        
+        filtro_usuario = self.usuario_actual if self.rol_actual == "Cajero" else None
+        
+        tarea = TareaCargarVentas(self.repo_ventas, self.cola_tareas, self._cancelar_carga, fecha_filtro, usuario_filtro=filtro_usuario)
         self.hilo_carga = threading.Thread(target=tarea.run, name="HiloCargaVentas", daemon=True)
         self.estado_carga = {"estado": "cargando", "porcentaje": 0.0, "leidas": 0, "mensaje": ""}
         self.hilo_carga.start()
@@ -213,11 +216,43 @@ class ControladorDulceria:
             if resultado == "stock_insuficiente": messagebox.showerror("Error de Stock", "No existe cantidad suficiente")
             elif resultado == "no_encontrado": messagebox.showerror("Error", "Producto no encontrado")
 
+    def procesar_eliminar_producto(self, nombre_producto):
+        if self.rol_actual != "Administrador":
+            return False, "No tienes permisos."
+        if self.modelo.eliminar_producto(nombre_producto):
+            return True, f"Producto '{nombre_producto}' eliminado."
+        return False, "Error al eliminar."
+
+    def procesar_editar_producto(self, nombre_original, nombre, marca, categoria, precio, stock):
+        if self.rol_actual != "Administrador":
+            return False, "Acceso denegado. Solo un Administrador puede editar productos."
+            
+        try:
+            precio = float(precio)
+            stock = int(stock)
+        except (ValueError, TypeError):
+            return False, "Precio y stock deben ser números válidos."
+            
+        if not nombre.strip():
+            return False, "El nombre no puede estar vacío."
+
+        datos = {
+            "nombre": nombre.strip(),
+            "marca": marca.strip() or "Genérica",
+            "categoria": categoria.strip() or "General",
+            "precio": precio,
+            "stock": stock
+        }
+        
+        if self.modelo.editar_producto(nombre_original, datos):
+            return True, f"Producto '{nombre}' actualizado correctamente."
+        return False, "Error al intentar actualizar el producto."
+        
     def obtener_datos_ventas(self):
         return self.modelo.inventario, self.modelo.ticket_actual, self.modelo.calcular_total()
 
     def solicitar_proveedor(self, nombre_producto, stock_actual):
-    #  Agregamos {stock_actual} al mensaje
+    # Agregamos {stock_actual} al mensaje
       mensaje = f"¿Deseas abastecer {nombre_producto}?\n\nStock actual: {stock_actual} unidades."
       
       if messagebox.askyesno("Pedido a Proveedor", mensaje):
@@ -237,16 +272,33 @@ class ControladorDulceria:
         return self.modelo.proveedores
 
     def procesar_nuevo_proveedor(self, nombre, telefono, correo):
+        
+        if self.rol_actual != "Administrador":
+            return False, "Acceso denegado. Solo un Administrador gestiona proveedores."
+        
         resultado = self.modelo.agregar_proveedor(nombre, telefono, correo)
         if resultado == "nombre_vacio": return False, "El nombre no puede estar vacío."
         if resultado == "ya_existe": return False, f"Ya existe '{nombre}'."
         return True, f"Proveedor '{nombre}' agregado."
+    
+    def procesar_editar_proveedor(self, proveedor_id, telefono, correo):
+        if self.rol_actual != "Administrador":
+            return False, "No tienes permisos."
+        if self.modelo.editar_proveedor(proveedor_id, telefono, correo):
+            return True, "Proveedor actualizado."
+        return False, "Error."
 
     def procesar_eliminar_proveedor(self, proveedor_id):
+        if self.rol_actual != "Administrador":
+            return False, "Acceso denegado."
         self.modelo.eliminar_proveedor(proveedor_id)
         return True
 
     def procesar_nuevo_producto(self, nombre, marca, categoria, precio, stock, proveedor_id=None):
+        
+        if self.rol_actual != "Administrador":
+            return False, "Acceso denegado. Solo un Administrador puede crear productos."
+        
         try: precio = float(precio); stock = int(stock)
         except (ValueError, TypeError): return False, "Precio y stock inválidos."
         resultado = self.modelo.agregar_producto(nombre, marca, categoria, precio, stock, proveedor_id)
@@ -263,13 +315,25 @@ class ControladorDulceria:
         segundos = max(0, int(duracion.total_seconds()))
         horas, resto = divmod(segundos, 3600)
         minutos, segundos = divmod(resto, 60)
+
+        # Calculamos cuánto efectivo debería haber en caja
+        ventas_turno = self.repo_ventas.obtener_todas()
+        efectivo_esperado = 0.0
+        
+        for v in ventas_turno:
+            # Verificamos si la venta se hizo en este turno (después de inicio_sesion)
+            fecha_venta = datetime.strptime(v["fecha"], "%Y-%m-%d %H:%M:%S")
+            if fecha_venta >= inicio and v["metodo_pago"] == "Efectivo":
+                efectivo_esperado += float(v["total"])
+
         return {
             "usuario": self.usuario_actual or "",
             "inicio": inicio.strftime("%d/%m/%Y %H:%M:%S"),
             "fin": fin.strftime("%d/%m/%Y %H:%M:%S"),
             "duracion": f"{horas:02d} horas, {minutos:02d} minutos y {segundos:02d} segundos",
+            "efectivo_esperado": efectivo_esperado 
         }
-
+    
     def obtener_ventas_para_devolucion(self):
         return self.repo_ventas.obtener_todas()
 
@@ -277,6 +341,15 @@ class ControladorDulceria:
         return self.servicio_devoluciones.obtener_cantidades_devueltas()
 
     def registrar_devolucion(self, venta, producto, cantidad, motivo):
+        
+        if self.rol_actual == "Cajero":
+            pass_admin = simpledialog.askstring("Autorización", "Se requiere contraseña de Administrador:", show="*")
+            
+            # Validamos que la contraseña sea de algún admin en el modelo
+            es_admin = any(u == pass_admin for rol, u in self.modelo.usuarios.items() if self.modelo.roles.get(rol) == "Administrador")
+            if not es_admin:
+                return False, "Contraseña incorrecta. Devolución cancelada."
+        
         if cantidad <= 0: return False, "La cantidad debe ser mayor que cero."
         articulo = next((a for a in venta.get("articulos", []) if a.get("producto") == producto), None)
         if not articulo: return False, "El producto no pertenece a esa venta."

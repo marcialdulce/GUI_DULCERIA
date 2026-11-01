@@ -83,6 +83,7 @@ class PanelInventario(tk.Frame):
         
         # Evento para detectar clics en la tabla
         self.tabla_inv.bind("<ButtonRelease-1>", self.clic_en_tabla)
+        self.tabla_inv.bind("<Double-Button-1>", self.doble_clic_editar) 
 
         self.notificar_filtros()
 
@@ -375,3 +376,85 @@ class PanelInventario(tk.Frame):
         tk.Button(modal, text="GUARDAR", bg="#27AE60", fg="white",
                 font=("Arial", 10, "bold"), width=15,
                 command=guardar).pack(pady=20)
+        
+    def doble_clic_editar(self, event):
+            """Abre el modal de edición al hacer doble clic en una fila."""
+            item = self.tabla_inv.identify_row(event.y)
+            if not item:
+                return
+            valores = self.tabla_inv.item(item, "values")
+            if valores:
+                nombre_producto = valores[0]
+                self.abrir_ventana_editar_producto(nombre_producto)
+
+    def abrir_ventana_editar_producto(self, nombre_original):
+            """Formulario emergente para editar un producto."""
+            # Buscamos los datos actuales del producto
+            producto = next((p for p in self.controlador.modelo.inventario if p["nombre"] == nombre_original), None)
+            if not producto:
+                return
+
+            modal = tk.Toplevel(self)
+            modal.title(f"Editar Producto - {nombre_original}")
+            modal.geometry("420x420")
+            modal.config(bg=estilos.FONDO)
+            modal.grab_set()
+
+            # Centrar modal
+            x = (modal.winfo_screenwidth() // 2) - 210
+            y = (modal.winfo_screenheight() // 2) - 210
+            modal.geometry(f"420x420+{x}+{y}")
+
+            tk.Label(modal, text="EDITAR PRODUCTO", bg=estilos.FONDO, font=("Arial", 12, "bold")).pack(pady=15)
+
+            campos = tk.Frame(modal, bg=estilos.FONDO)
+            campos.pack(pady=10)
+
+            # Nombre
+            tk.Label(campos, text="Nombre:", bg=estilos.FONDO).grid(row=0, column=0, sticky="e", pady=5)
+            entry_nombre = tk.Entry(campos, width=25)
+            entry_nombre.insert(0, producto["nombre"])
+            entry_nombre.grid(row=0, column=1, pady=5, padx=5)
+
+            # Marca
+            tk.Label(campos, text="Marca:", bg=estilos.FONDO).grid(row=1, column=0, sticky="e", pady=5)
+            entry_marca = tk.Entry(campos, width=25)
+            entry_marca.insert(0, producto["marca"])
+            entry_marca.grid(row=1, column=1, pady=5, padx=5)
+
+            # Categoría
+            tk.Label(campos, text="Categoría:", bg=estilos.FONDO).grid(row=2, column=0, sticky="e", pady=5)
+            combo_cat = ttk.Combobox(campos, values=["Gomitas", "Chocolates", "Frituras", "General"], width=22, state="readonly")
+            combo_cat.set(producto["categoria"])
+            combo_cat.grid(row=2, column=1, pady=5, padx=5)
+
+            # Precio
+            tk.Label(campos, text="Precio ($):", bg=estilos.FONDO).grid(row=3, column=0, sticky="e", pady=5)
+            entry_precio = tk.Entry(campos, width=25)
+            entry_precio.insert(0, str(producto["precio"]))
+            entry_precio.grid(row=3, column=1, pady=5, padx=5)
+
+            # Stock
+            tk.Label(campos, text="Stock:", bg=estilos.FONDO).grid(row=4, column=0, sticky="e", pady=5)
+            entry_stock = tk.Entry(campos, width=25)
+            entry_stock.insert(0, str(producto["stock"]))
+            entry_stock.grid(row=4, column=1, pady=5, padx=5)
+
+            def guardar_cambios():
+                ok, msg = self.controlador.procesar_editar_producto(
+                    nombre_original,
+                    entry_nombre.get(),
+                    entry_marca.get(),
+                    combo_cat.get(),
+                    entry_precio.get(),
+                    entry_stock.get()
+                )
+                if ok:
+                    messagebox.showinfo("Éxito", msg, parent=modal)
+                    modal.destroy()
+                    self.notificar_filtros() # Refresca la tabla
+                else:
+                    messagebox.showerror("Error", msg, parent=modal)
+
+            tk.Button(modal, text="GUARDAR CAMBIOS", bg="#F4D03F", font=("Arial", 10, "bold"), 
+                    relief="flat", command=guardar_cambios).pack(pady=20)

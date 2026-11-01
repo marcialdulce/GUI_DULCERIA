@@ -69,7 +69,7 @@ class ResumenVentas:
 class TareaCargarVentas:
     """Runnable: lee el archivo de ventas y calcula el resumen."""
 
-    def __init__(self, repositorio, cola, cancelar, fecha_filtro="", tam_bloque=TAM_BLOQUE):
+    def __init__(self, repositorio, cola, cancelar, fecha_filtro="", tam_bloque=TAM_BLOQUE, usuario_filtro=None):
         self.repo = repositorio
         self.cola = cola
         self.cancelar = cancelar              # threading.Event: "por favor, detente"
