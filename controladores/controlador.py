@@ -66,71 +66,85 @@ class ControladorDulceria:
             messagebox.showwarning("Aviso", "El ticket está vacío. Agrega productos primero.")
             return
 
-        pago = total
-        if tipo_pago == "Efectivo":
-            pago = simpledialog.askfloat("Cobrar en Efectivo", f"Total a cobrar: ${total:.2f}\n¿Con cuánto efectivo paga el cliente?")
-            if pago is None: return
+        pago = self._solicitar_pago(total, tipo_pago)
+        if pago is None: 
+            return
 
         carrito_respaldo = self.modelo.ticket_actual.copy()
         exito, cambio = self.modelo.procesar_cobro(pago)
         
         if exito:
             self.modelo.guardar_inventario()
-            aviso_historial = ""
-            try:
-                self.repo_ventas.registrar(
-                    metodo_pago=tipo_pago,
-                    total=total,
-                    articulos=carrito_respaldo,
-                    facturado=bool(datos_factura and datos_factura.get("requiere")),
-                )
-            except OSError as e:
-                aviso_historial = f"\n\nAviso: la venta no se pudo guardar en el historial ({e.strerror or e})."
+            aviso_historial = self._registrar_venta_historial(tipo_pago, total, carrito_respaldo, datos_factura)
 
             mensaje = f"¡Venta procesada con éxito!\n\nMétodo de pago: {tipo_pago}\n"
             if tipo_pago == "Efectivo":
                 mensaje += f"Cambio a entregar: ${cambio:.2f}\n"
             
             if datos_factura and datos_factura.get("requiere"):
-                nombre_archivo = f"Factura_{datos_factura['rfc']}.pdf"
-                razon_social = f"{datos_factura.get('nombre','')} {datos_factura.get('apellidos','')}".strip()
-
-                # PEDIMOS LA RUTA AL USUARIO
-                from tkinter import filedialog
-                ruta_completa_pdf = filedialog.asksaveasfilename(
-                    title="Guardar Factura",
-                    defaultextension=".pdf",
-                    initialfile=nombre_archivo,
-                    filetypes=[("Archivos PDF", "*.pdf")]
-                )
-
-                if not ruta_completa_pdf:
-                    messagebox.showwarning("Aviso", "Se canceló el guardado de la factura.")
-                    return # Si cancela, no generamos el hilo, pero la venta ya se hizo
-
-                #  LE PASAMOS ruta_completa AL HILO
-                self.hilo_factura = HiloFactura(         
-                    ruta_completa=ruta_completa_pdf, 
-                    rfc=datos_factura['rfc'],
-                    razon_social=razon_social,
-                    total=total,
-                    carrito=carrito_respaldo,
-                    metodo_pago=tipo_pago,
-                    pago=pago,
-                    cambio=cambio
-                )
-                self.hilo_factura.set_prioridad(9)
-                self.hilo_factura.start()
-                
-                self.hilo_secundario = threading.Thread(
-                    target=self._tarea_notificar_fin, 
-                    args=(nombre_archivo, self.vista.pantallas["MenuPrincipal"].contenido.winfo_children()[0]),
-                    daemon=True)
-                self.hilo_secundario.start()
-                mensaje += "\n Factura generándose en segundo plano..."
+                # Si se genera factura, el método nos devuelve el texto extra
+                mensaje += self._iniciar_hilo_factura(datos_factura, total, carrito_respaldo, tipo_pago, pago, cambio)
 
             messagebox.showinfo("Ticket Cobrado", mensaje + aviso_historial)
 
+    def _solicitar_pago(self, total, tipo_pago):
+        """Extrae la lógica de pedir el pago en efectivo."""
+        if tipo_pago == "Efectivo":
+            pago = simpledialog.askfloat("Cobrar en Efectivo", f"Total a cobrar: ${total:.2f}\n¿Con cuánto efectivo paga el cliente?")
+            return pago
+        return total
+
+    def _registrar_venta_historial(self, tipo_pago, total, carrito, datos_factura):
+        """Extrae la lógica de guardar en el archivo JSON."""
+        try:
+            self.repo_ventas.registrar(
+                metodo_pago=tipo_pago,
+                total=total,
+                articulos=carrito,
+                facturado=bool(datos_factura and datos_factura.get("requiere")),
+            )
+            return ""
+        except OSError as e:
+            return f"\n\nAviso: la venta no se pudo guardar en el historial ({e.strerror or e})."
+
+    def _iniciar_hilo_factura(self, datos_factura, total, carrito, tipo_pago, pago, cambio):
+        """Extrae la lógica de la ventana de guardado y la creación del Hilo."""
+        nombre_archivo = f"Factura_{datos_factura['rfc']}.pdf"
+        razon_social = f"{datos_factura.get('nombre','')} {datos_factura.get('apellidos','')}".strip()
+
+        from tkinter import filedialog
+        ruta_completa_pdf = filedialog.asksaveasfilename(
+            title="Guardar Factura",
+            defaultextension=".pdf",
+            initialfile=nombre_archivo,
+            filetypes=[("Archivos PDF", "*.pdf")]
+        )
+
+        if not ruta_completa_pdf:
+            messagebox.showwarning("Aviso", "Se canceló el guardado de la factura.")
+            return "" # Retorna vacío para que no añada texto al mensaje
+
+        self.hilo_factura = HiloFactura(         
+            ruta_completa=ruta_completa_pdf, 
+            rfc=datos_factura['rfc'],
+            razon_social=razon_social,
+            total=total,
+            carrito=carrito,
+            metodo_pago=tipo_pago,
+            pago=pago,
+            cambio=cambio
+        )
+        self.hilo_factura.set_prioridad(9)
+        self.hilo_factura.start()
+        
+        self.hilo_secundario = threading.Thread(
+            target=self._tarea_notificar_fin, 
+            args=(nombre_archivo, self.vista.pantallas["MenuPrincipal"].contenido.winfo_children()[0]),
+            daemon=True)
+        self.hilo_secundario.start()
+        
+        return "\n Factura generándose en segundo plano..."
+      
     def _tarea_notificar_fin(self, nombre_archivo, panel_ventas):
         self.hilo_factura.join()
         if self.hilo_factura.exito:
@@ -203,9 +217,18 @@ class ControladorDulceria:
         return self.modelo.inventario, self.modelo.ticket_actual, self.modelo.calcular_total()
 
     def solicitar_proveedor(self, nombre_producto, stock_actual):
-        if messagebox.askyesno("Pedido", f"¿Abastecer {nombre_producto}?"):
-            self.pedidos_activos.append({"id": max([p["id"] for p in self.pedidos_activos], default=0) + 1, "producto": nombre_producto, "cantidad": 50, "estado": "Pendiente"})
-            messagebox.showinfo("Éxito", "Pedido enviado.")
+    #  Agregamos {stock_actual} al mensaje
+      mensaje = f"¿Deseas abastecer {nombre_producto}?\n\nStock actual: {stock_actual} unidades."
+      
+      if messagebox.askyesno("Pedido a Proveedor", mensaje):
+        nuevo_id = max([p["id"] for p in self.pedidos_activos], default=0) + 1
+        self.pedidos_activos.append({
+            "id": nuevo_id,
+            "producto": nombre_producto,
+            "cantidad": 50,
+            "estado": "Pendiente",
+        })
+        messagebox.showinfo("Éxito", f"Pedido enviado para {nombre_producto}.")
 
     def procesar_filtro_inventario(self, texto, marca, categoria):
         return self.modelo.obtener_inventario_filtrado(texto, marca, categoria)

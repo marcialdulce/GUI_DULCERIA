@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from vistas import estilos
 
+DEBITO = "Débito"
 CREDITO = "Crédito"
 EVENTO_RUEDA = "<MouseWheel>"
 
@@ -95,7 +96,7 @@ class PanelVentas(tk.Frame):
 
         # --------------OPCIONES DE COBRO Y FACTURA-------------
         self.metodo_pago = tk.StringVar(value="Efectivo")
-        self.tipo_tarjeta = tk.StringVar(value="Crédito")
+        self.tipo_tarjeta = tk.StringVar(value=CREDITO)
         self.quiere_facturar = tk.BooleanVar(value=False)
 
         frame_opciones = tk.Frame(panel_der, bg="#F4F4F4")
@@ -114,7 +115,7 @@ class PanelVentas(tk.Frame):
         # Sub-opciones de Tarjeta (Crédito / Débito) - Ocultas por defecto
         self.frame_tipo_tarjeta = tk.Frame(frame_opciones, bg="#F4F4F4")
         tk.Radiobutton(self.frame_tipo_tarjeta, text=CREDITO, variable=self.tipo_tarjeta, value=CREDITO, bg="#F4F4F4").pack(side="left", padx=(0, 10))
-        tk.Radiobutton(self.frame_tipo_tarjeta, text="Débito", variable=self.tipo_tarjeta, value="Débito", bg="#F4F4F4").pack(side="left")
+        tk.Radiobutton(self.frame_tipo_tarjeta, text=DEBITO, variable=self.tipo_tarjeta, value=DEBITO, bg="#F4F4F4").pack(side="left")
 
         # Opción si el cliente desea facturar
         tk.Label(frame_opciones, text="¿El cliente requiere Factura?", bg="#F4F4F4", font=("Arial", 9, "bold")).pack(anchor="w", pady=(5,0))
@@ -157,7 +158,7 @@ class PanelVentas(tk.Frame):
 
         self.frame_tipo_tarjeta = tk.Frame(frame_opciones, bg="#F4F4F4")
         tk.Radiobutton(self.frame_tipo_tarjeta, text=CREDITO, variable=self.tipo_tarjeta, value=CREDITO, bg="#F4F4F4").pack(side="left", padx=(0, 10))
-        tk.Radiobutton(self.frame_tipo_tarjeta, text="Débito", variable=self.tipo_tarjeta, value="Débito", bg="#F4F4F4").pack(side="left")
+        tk.Radiobutton(self.frame_tipo_tarjeta, text=DEBITO, variable=self.tipo_tarjeta, value=DEBITO, bg="#F4F4F4").pack(side="left")
 
         tk.Label(frame_opciones, text="¿El cliente requiere Factura?", bg="#F4F4F4", font=("Arial", 9, "bold")).pack(anchor="w", pady=(5,0))
 

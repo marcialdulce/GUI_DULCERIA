@@ -75,25 +75,24 @@ class MenuPrincipal(tk.Frame):
         for widget in self.contenido.winfo_children():
             widget.destroy()
 
-        if opcion == "INICIO":
-            PanelInicio(self.contenido, self.controlador, self.mostrar_seccion).pack(fill="both", expand=True)
-        elif opcion == "NUEVA VENTA":
-            PanelVentas(self.contenido, self.controlador).pack(fill="both", expand=True)
-        elif opcion == "PUNTO DE VENTA":
-            PanelVentas(self.contenido, self.controlador, modo_punto_venta=True, ir_a_cobros=lambda: self.mostrar_seccion("COBROS Y PAGOS")).pack(fill="both", expand=True)
-        elif opcion == "COBROS Y PAGOS":
-            PanelCobros(self.contenido, self.controlador).pack(fill="both", expand=True)
-        elif opcion == "INVENTARIO":
-            PanelInventario(self.contenido, self.controlador).pack(fill="both", expand=True)
-        elif opcion == "APARTADOS":
-            PanelApartados(self.contenido, self.controlador).pack(fill="both", expand=True)
-        elif opcion == "PROVEEDORES":
-            PanelProveedores(self.contenido, self.controlador).pack(fill="both", expand=True)
-        elif opcion in ("HISTORIAL", "HISTORIAL DE VENTAS"):
-            PanelHistorial(self.contenido, self.controlador).pack(fill="both", expand=True)
-        elif opcion == "TICKETS":
-            PanelTickets(self.contenido, self.controlador).pack(fill="both", expand=True)
-        elif opcion == "DEVOLUCIONES":
-            PanelDevoluciones(self.contenido, self.controlador).pack(fill="both", expand=True)
-        elif opcion == "CIERRE DE CAJA":
-            PanelCierreCaja(self.contenido, self.controlador).pack(fill="both", expand=True)
+        #  DICCIONARIO DE PANELES
+        paneles = {
+            "INICIO": lambda: PanelInicio(self.contenido, self.controlador, self.mostrar_seccion),
+            "NUEVA VENTA": lambda: PanelVentas(self.contenido, self.controlador),
+            "PUNTO DE VENTA": lambda: PanelVentas(self.contenido, self.controlador, modo_punto_venta=True, ir_a_cobros=lambda: self.mostrar_seccion("COBROS Y PAGOS")),
+            "COBROS Y PAGOS": lambda: PanelCobros(self.contenido, self.controlador),
+            "INVENTARIO": lambda: PanelInventario(self.contenido, self.controlador),
+            "APARTADOS": lambda: PanelApartados(self.contenido, self.controlador),
+            "PROVEEDORES": lambda: PanelProveedores(self.contenido, self.controlador),
+            "HISTORIAL": lambda: PanelHistorial(self.contenido, self.controlador),
+            "HISTORIAL DE VENTAS": lambda: PanelHistorial(self.contenido, self.controlador),
+            "TICKETS": lambda: PanelTickets(self.contenido, self.controlador),
+            "DEVOLUCIONES": lambda: PanelDevoluciones(self.contenido, self.controlador),
+            "CIERRE DE CAJA": lambda: PanelCierreCaja(self.contenido, self.controlador)
+        }
+
+        # Buscamos la opción en el diccionario y la ejecutamos
+        generador_panel = paneles.get(opcion)
+        if generador_panel:
+            panel = generador_panel()
+            panel.pack(fill="both", expand=True)
