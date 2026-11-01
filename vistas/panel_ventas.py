@@ -375,5 +375,5 @@ class PanelVentas(tk.Frame):
         
     def cancelar_ticket_actual(self):
         if messagebox.askyesno("Cancelar Ticket", "¿Estás seguro de que deseas vaciar el ticket actual?"):
-            self.controlador.modelo.ticket_actual.clear()
+            self.controlador.vaciar_ticket_actual()  
             self.refrescar_pantalla()

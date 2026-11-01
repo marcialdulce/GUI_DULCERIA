@@ -4,6 +4,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from vistas import estilos
 
+TITULO_EXITO = "Éxito"
+
 class PanelInventario(tk.Frame):
     def __init__(self, parent, controlador):
         super().__init__(parent, bg=estilos.FONDO) 
@@ -88,49 +90,26 @@ class PanelInventario(tk.Frame):
         self.notificar_filtros()
 
     # =========================================================================
-    # LÓGICA Y DESARROLLO DEL HILO (HILO 4)
+    # EJECUCIÓN DEL HILO (HILO 4) DELEGADO AL CONTROLADOR
     # =========================================================================
     def iniciar_hilo_reposicion(self):
-        """Inicia el hilo para procesar la reposición automática sin congelar la GUI."""
-        self.btn_hilo_reposicion.config(state="disabled", text="⏳ PROCESANDO REPOSICIÓN...")
+        self.btn_hilo_reposicion.config(state="disabled", text=" PROCESANDO REPOSICIÓN...")
+        # Se envía al controlador y se le pasa la función que debe ejecutar al terminar
+        self.controlador.iniciar_reposicion_automatica(self._finalizar_hilo_reposicion)
+
+    def _finalizar_hilo_reposicion(self, creados):
+        # Tkinter exige que los cambios visuales se hagan en el hilo principal usando after()
+        self.after(0, lambda: self._actualizar_ui_tras_reposicion(creados))
+
+    def _actualizar_ui_tras_reposicion(self, creados):
+        self.btn_hilo_reposicion.config(state="normal", text="⚡ SOLICITAR REPOSICIÓN ")
+        self.notificar_filtros()
+
+        if creados > 0:
+            messagebox.showinfo("Reposición Completada", f"Se han generado automáticamente {creados} órdenes de reposición.")
+        else:
+            messagebox.showinfo("Sin Cambios", "No se encontraron productos por agotarse o ya tienen un pedido pendiente activo.")
         
-        hilo = threading.Thread(target=self._tarea_reposicion_background)
-        hilo.daemon = True
-        hilo.start()
-
-    def _tarea_reposicion_background(self):
-        """Método ejecutado en el hilo secundario (Background Thread)."""
-        productos = self.controlador.procesar_filtro_inventario("", "Todas", "Todas")
-        
-        # Simulación de proceso pesado (comunicación o análisis de reposición)
-        time.sleep(2)
-
-        nuevos_pedidos_creados = 0
-
-        for prod in productos:
-            nombre = prod["nombre"]
-            stock = prod["stock"]
-
-            # Evaluamos los productos que están por agotarse (stock < 15)
-            if stock < 15:
-                pedido_existente = next(
-                    (p for p in self.controlador.pedidos_activos if p["producto"] == nombre and p["estado"] == "Pendiente"), 
-                    None
-                )
-
-                if not pedido_existente:
-                    cantidad_a_pedir = 50 - stock
-                    nuevo_id = max([p["id"] for p in self.controlador.pedidos_activos], default=0) + 1
-                    
-                    self.controlador.pedidos_activos.append({
-                        "id": nuevo_id,
-                        "producto": nombre,
-                        "cantidad": cantidad_a_pedir,
-                        "estado": "Pendiente"
-                    })
-                    nuevos_pedidos_creados += 1
-
-        self.after(0, lambda: self._finalizar_hilo_reposicion(nuevos_pedidos_creados))
 
     def _finalizar_hilo_reposicion(self, creados):
         """Actualiza la interfaz de usuario cuando el hilo termina su ejecución."""
@@ -238,7 +217,7 @@ class PanelInventario(tk.Frame):
                     "cantidad": cantidad,
                     "estado": "Pendiente"
                 })
-                messagebox.showinfo("Éxito", f"Se han solicitado {cantidad} unidades de {producto}.")
+                messagebox.showinfo(TITULO_EXITO, f"Se han solicitado {cantidad} unidades de {producto}.")
             
             dialogo.destroy()
             self.notificar_filtros()
@@ -367,7 +346,7 @@ class PanelInventario(tk.Frame):
                 proveedor_id
             )
             if ok:
-                messagebox.showinfo("Éxito", msg, parent=modal)
+                messagebox.showinfo(TITULO_EXITO, msg, parent=modal)
                 modal.destroy()
                 self.notificar_filtros()
             else:
@@ -450,7 +429,7 @@ class PanelInventario(tk.Frame):
                     entry_stock.get()
                 )
                 if ok:
-                    messagebox.showinfo("Éxito", msg, parent=modal)
+                    messagebox.showinfo(TITULO_EXITO, msg, parent=modal)
                     modal.destroy()
                     self.notificar_filtros() # Refresca la tabla
                 else:

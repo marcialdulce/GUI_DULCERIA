@@ -385,3 +385,7 @@ class ControladorDulceria:
         login_screen = self.vista.pantallas["PantallaLogin"]
         login_screen.entry_usuario.delete(0, "end")
         login_screen.entry_pass.delete(0, "end")
+        
+    def vaciar_ticket_actual(self):
+        """Vacía el carrito de compras actual desde el modelo."""
+        self.modelo.ticket_actual.clear()
