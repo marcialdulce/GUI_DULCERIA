@@ -44,40 +44,26 @@ class PanelCierreCaja(tk.Frame):
                   command=self.confirmar_cierre).pack(pady=8)
 
     def confirmar_cierre(self):
-        if not messagebox.askyesno(
-            "Confirmar cierre de caja",
-            "¿Deseas finalizar tu turno y cerrar la sesión?"
-        ):
+        if not messagebox.askyesno("Confirmar cierre", "¿Deseas finalizar tu turno y cerrar la caja?"):
             return
-        resumen = self.controlador.obtener_resumen_cierre_caja()
-        mensaje = (
-            f"Cajero: {resumen['usuario']}\n"
-            f"Inicio de sesión: {resumen['inicio']}\n"
-            f"Hora de cierre: {resumen['fin']}\n"
-            f"Tiempo trabajado: {resumen['duracion']}\n\n"
-            "La sesión se cerrará ahora."
+        
+        #  Se pide el dinero físico sin revelar la cantidad esperada
+        efectivo_fisico = simpledialog.askfloat(
+            "Arqueo de Caja Ciego", 
+            "Por políticas de seguridad, ingresa el monto total de efectivo físico que contaste en la caja:"
         )
-        messagebox.showinfo("Cierre de caja realizado", mensaje)
-        self.controlador.cerrar_sesion()
-        
-    def confirmar_cierre(self):
-        if not messagebox.askyesno("Confirmar cierre", "¿Deseas finalizar tu turno?"):
-            return
-        
-        # Pedimos al cajero que cuente el dinero
-        efectivo_fisico = simpledialog.askfloat("Arqueo de Caja", 
-            f"El sistema espera ${self.resumen['efectivo_esperado']:.2f} en efectivo.\n\n¿Cuánto dinero contaste físicamente en la caja?")
         
         if efectivo_fisico is None:
-            return # Canceló
+            return # El cajero canceló el proceso
             
         diferencia = efectivo_fisico - self.resumen['efectivo_esperado']
         
+        # Se oculta la cifra exacta de la diferencia para evitar manipulación de información
         if diferencia == 0:
-            messagebox.showinfo("Cierre Perfecto", "¡La caja cuadra a la perfección!")
+            messagebox.showinfo("Cierre Guardado", "El arqueo ha sido registrado. La caja cuadra a la perfección.")
         elif diferencia > 0:
-            messagebox.showwarning("Sobrante", f"Hay un sobrante de ${diferencia:.2f} en la caja.")
+            messagebox.showwarning("Cierre Registrado", "El arqueo ha sido registrado con un sobrante en caja. Esto será notificado al Administrador.")
         else:
-            messagebox.showerror("Faltante", f"¡Cuidado! Hay un faltante de ${abs(diferencia):.2f} en la caja.")
+            messagebox.showerror("Cierre Registrado", "El arqueo ha sido registrado con un faltante en caja. Esto será notificado al Administrador.")
             
         self.controlador.cerrar_sesion()

@@ -74,7 +74,6 @@ class ControladorDulceria:
         exito, cambio = self.modelo.procesar_cobro(pago)
         
         if exito:
-            self.modelo.guardar_inventario()
             aviso_historial = self._registrar_venta_historial(tipo_pago, total, carrito_respaldo, datos_factura)
 
             mensaje = f"¡Venta procesada con éxito!\n\nMétodo de pago: {tipo_pago}\n"
@@ -341,14 +340,23 @@ class ControladorDulceria:
         return self.servicio_devoluciones.obtener_cantidades_devueltas()
 
     def registrar_devolucion(self, venta, producto, cantidad, motivo):
+        autorizador = self.usuario_actual
         
         if self.rol_actual == "Cajero":
-            pass_admin = simpledialog.askstring("Autorización", "Se requiere contraseña de Administrador:", show="*")
+            usuario_admin = simpledialog.askstring("Autorización", "Usuario del Administrador:")
+            if not usuario_admin: return False, "Autorización cancelada."
             
-            # Validamos que la contraseña sea de algún admin en el modelo
-            es_admin = any(u == pass_admin for rol, u in self.modelo.usuarios.items() if self.modelo.roles.get(rol) == "Administrador")
-            if not es_admin:
-                return False, "Contraseña incorrecta. Devolución cancelada."
+            pass_admin = simpledialog.askstring("Autorización", "Contraseña del Administrador:", show="*")
+            if not pass_admin: return False, "Autorización cancelada."
+            
+            # Validación estricta contra el modelo
+            es_valido = self.modelo.validar_usuario(usuario_admin, pass_admin)
+            rol_admin = self.modelo.obtener_rol(usuario_admin)
+            
+            if not es_valido or rol_admin != "Administrador":
+                return False, "Credenciales incorrectas o el usuario no es Administrador. Devolución cancelada."
+            
+            autorizador = usuario_admin # Queda registrado quién autorizó realmente
         
         if cantidad <= 0: return False, "La cantidad debe ser mayor que cero."
         articulo = next((a for a in venta.get("articulos", []) if a.get("producto") == producto), None)
@@ -368,7 +376,7 @@ class ControladorDulceria:
         importe = round(precio_unitario * cantidad, 2)
         
         devolucion = self.servicio_devoluciones.registrar(
-            venta.get("folio"), producto, cantidad, importe, motivo, self.usuario_actual or ""
+            venta.get("folio"), producto, cantidad, importe, motivo, autorizador
         )
         
         inventario["stock"] = int(inventario.get("stock", 0)) + cantidad

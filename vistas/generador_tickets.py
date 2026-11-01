@@ -9,22 +9,21 @@ from reportlab.pdfgen import canvas
 # =========================================================
 def generar_ticket_pdf(ruta_completa, rfc, razon_social, total, carrito_comprado, metodo_pago, pago, cambio):
     fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    c = canvas.Canvas(ruta_completa, pagesize=letter)
+    
+    razon_social_segura = str(razon_social).replace('\n', ' ').replace('\r', '').strip()[:35]
+    rfc_seguro = str(rfc).replace('\n', ' ').replace('\r', '').strip()[:14]
 
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(40, 750, "DULCERÍA MVC S.A. DE C.V.")
-    c.setFont("Helvetica", 10)
-    c.drawString(40, 735, "RFC: DULC202609MVC")
-    c.drawString(40, 720, "Régimen Fiscal: 601 - General de Ley Personas Morales")
-    c.drawString(40, 705, "C.P. de Expedición: 39355 (Acapulco, Gro.)")
+    c = canvas.Canvas(ruta_completa, pagesize=letter)
+    
     
     c.setFont("Helvetica-Bold", 12)
     c.drawString(320, 750, "FACTURA ELECTRÓNICA (CFDI 4.0)")
     c.setFont("Helvetica", 10)
     c.drawString(320, 735, f"Fecha: {fecha_actual}")
-    c.drawString(320, 720, f"Receptor: {razon_social}")
-    c.drawString(320, 705, f"RFC: {rfc}")
     
+    # 2. Inyectar las variables seguras, nunca las variables directas del input
+    c.drawString(320, 720, f"Receptor: {razon_social_segura}")
+    c.drawString(320, 705, f"RFC: {rfc_seguro}")
     c.drawString(320, 690, "C.P.: 39355   |  Uso CFDI: G03 - Gastos en general")
     c.drawString(320, 675, "Régimen: 612 - Personas Físicas con")
     c.drawString(320, 660, "Actividades Empresariales")
