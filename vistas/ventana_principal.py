@@ -46,7 +46,32 @@ class VistaDulceria(ttk.Window): # <-- 2. Heredamos de ttk.Window en lugar de tk
     # Métodos auxiliares para controlar la pantalla completa
     def salir_pantalla_completa(self, event=None):
         self.attributes('-fullscreen', False)
+        self.centrar_ventana()
+        
 
     def alternar_pantalla_completa(self, event=None):
         estado_actual = self.attributes('-fullscreen')
         self.attributes('-fullscreen', not estado_actual)
+        
+        # Si acabamos de salir de pantalla completa (estado_actual era True), lo centramos
+        if estado_actual: 
+            self.centrar_ventana()
+        
+    def centrar_ventana(self):
+        """Calcula las dimensiones de la pantalla y centra la ventana en ella."""
+        self.update_idletasks() # Asegura que Tkinter calcule los tamaños reales
+        
+        # Definimos un tamaño por defecto si la ventana se achica
+        ancho_ventana = 1024
+        alto_ventana = 700
+        
+        # Obtenemos la resolución del monitor
+        ancho_pantalla = self.winfo_screenwidth()
+        alto_pantalla = self.winfo_screenheight()
+        
+        # Calculamos la posición X e Y para el centro
+        x = (ancho_pantalla // 2) - (ancho_ventana // 2)
+        y = (alto_pantalla // 2) - (alto_ventana // 2)
+        
+        # Aplicamos el tamaño y la nueva posición
+        self.geometry(f"{ancho_ventana}x{alto_ventana}+{x}+{y}")
