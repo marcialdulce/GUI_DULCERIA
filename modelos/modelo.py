@@ -1,187 +1,158 @@
-import json
-import os
+from modelos.conexion import ConexionBD
 
 class ModeloDulceria:
-
-    RUTA_DATOS = "datos/dulceria.json"
-
     def __init__(self):
-        # Usuarios del sistema
-        self.usuarios = {
-            "Dulce": "1234",
-            "America": "1234",
-            "Daniel": "1234",
-            "Yeray": "1234",
-            "Josue": "1234",
-            "cajero01": "caja123"
-        }
-
-        # Diccionario de roles
-        self.roles = {
-            "Dulce": "Administrador",
-            "America": "Administrador",
-            "Daniel": "Administrador",
-            "Yeray": "Administrador",
-            "Josue": "Administrador",
-            "cajero01": "Cajero"
-        }
-
+        self.conexion_bd = ConexionBD()
         self.ticket_actual = [] 
-        self.historial_ventas = []
-        self.proveedores = []
         
-        # Inventario: Cargarlo desde el JSON
-        self.inventario = []
-        self._cargar_inventario()
-
-        if not self.inventario:
-            self._cargar_inventario_por_defecto()
-            self.guardar_inventario()
-
-    # ---------------- Persistencia JSON ----------------
-    def _cargar_inventario(self):
-        """Lee el inventario desde el JSON. Si no existe, deja la lista vacía."""
-        if not os.path.exists(self.RUTA_DATOS):
-            return
+    def _ejecutar_consulta(self, query, parametros=None, fetch=False, fetchall=False):
+        conexion = self.conexion_bd.conectar()
+        if not conexion: return None
         try:
-            with open(self.RUTA_DATOS, "r", encoding="utf-8") as f:
-                datos = json.load(f)
-            self.inventario = datos.get("inventario", [])
-            self.proveedores = datos.get("proveedores", [])
-        except (json.JSONDecodeError, IOError) as e:
-            print(f"[Modelo] Error al cargar inventario: {e}")
-            self.inventario = []
-            self.proveedores = []
+            cursor = conexion.cursor(dictionary=True)
+            cursor.execute(query, parametros or ())
+            resultado = None
+            if fetch: resultado = cursor.fetchone()
+            elif fetchall: resultado = cursor.fetchall()
+            else: conexion.commit()
+            return resultado
+        finally:
+            if conexion.is_connected():
+                cursor.close()
+                conexion.close()
 
-    def guardar_inventario(self):
-        """Escribe el inventario actual en el JSON."""
-        carpeta = os.path.dirname(self.RUTA_DATOS)
-        if carpeta:
-            os.makedirs(carpeta, exist_ok=True)
-        with open(self.RUTA_DATOS, "w", encoding="utf-8") as f:
-            json.dump({
-               "inventario": self.inventario,
-               "proveedores": self.proveedores
-            }, f, indent=4, ensure_ascii=False)
+    # ---------------- Usuarios y Roles ----------------
+    def validar_usuario(self, username, password):
+        query = "SELECT id_usuario FROM USUARIOS WHERE username = %s AND contraseña = %s AND estatus = 'Activo'"
+        usuario = self._ejecutar_consulta(query, (username, password), fetch=True)
+        return usuario is not None
+
+    def obtener_rol(self, username):
+        query = """
+            SELECT r.nombre_rol FROM USUARIOS u 
+            JOIN ROLES r ON u.id_rol = r.id_rol 
+            WHERE u.username = %s
+        """
+        resultado = self._ejecutar_consulta(query, (username,), fetch=True)
+        return resultado["nombre_rol"] if resultado else "Cajero"
+
+    def obtener_id_usuario(self, username):
+        query = "SELECT id_usuario FROM USUARIOS WHERE username = %s"
+        resultado = self._ejecutar_consulta(query, (username,), fetch=True)
+        return resultado["id_usuario"] if resultado else None
 
     # ---------------- Proveedores ----------------
     def agregar_proveedor(self, nombre, telefono="", correo=""):
-        if not nombre or not nombre.strip():
-            return "nombre_vacio"
-        if any(p["nombre"].lower() == nombre.strip().lower() for p in self.proveedores):
-            return "ya_existe"
-
-        nuevo_id = max((p["id"] for p in self.proveedores), default=0) + 1
-        self.proveedores.append({
-            "id": nuevo_id,
-            "nombre": nombre.strip(),
-            "telefono": telefono.strip(),
-            "correo": correo.strip()
-        })
-        self.guardar_inventario()
-        return nuevo_id
-
-    def obtener_proveedor(self, proveedor_id):
-        return next((p for p in self.proveedores if p["id"] == proveedor_id), None)
-    
-    def editar_proveedor(self, proveedor_id, telefono, correo):
-        prov = self.obtener_proveedor(proveedor_id)
-        if prov:
-            prov["telefono"] = telefono
-            prov["correo"] = correo
-            self.guardar_inventario()
-            return True
-        return False
-    
-    def eliminar_proveedor(self, proveedor_id):
-        self.proveedores = [p for p in self.proveedores if p["id"] != proveedor_id]
-        for prod in self.inventario:
-            if prod.get("proveedor_id") == proveedor_id:
-                prod["proveedor_id"] = None
-        self.guardar_inventario()
+        if not nombre or not nombre.strip(): return "nombre_vacio"
+        existe = self._ejecutar_consulta("SELECT id_proveedor FROM PROVEEDORES WHERE empresa = %s", (nombre,), fetch=True)
+        if existe: return "ya_existe"
+        
+        query = "INSERT INTO PROVEEDORES (empresa, telefono, correo) VALUES (%s, %s, %s)"
+        self._ejecutar_consulta(query, (nombre.strip(), telefono.strip(), correo.strip()))
         return True
 
-    def _cargar_inventario_por_defecto(self):
-        self.inventario = [
-            {"nombre": "Gomitas", "marca": "Ricolino", "categoria": "Gomitas", "precio": 15.0, "stock": 20},
-            {"nombre": "Chocolate", "marca": "Carlos V", "categoria": "Chocolates", "precio": 12.0, "stock": 15},
-            {"nombre": "Pap's", "marca": "Totis", "categoria": "Frituras", "precio": 4.0, "stock": 50},
-            {"nombre": "Panditas", "marca": "Ricolino", "categoria": "Gomitas", "precio": 20.0, "stock": 10},
-            {"nombre": "Kranky", "marca": "Ricolino", "categoria": "Chocolates", "precio": 14.0, "stock": 25},
-            {"nombre": "Bubulubu", "marca": "Ricolino", "categoria": "Chocolates", "precio": 16.0, "stock": 30},
-            {"nombre": "Carlos V Blanco", "marca": "Carlos V", "categoria": "Chocolates", "precio": 13.0, "stock": 20},
-            {"nombre": "Moritas", "marca": "Ricolino", "categoria": "Gomitas", "precio": 12.0, "stock": 40},
-            {"nombre": "Mangomitas", "marca": "Ricolino", "categoria": "Gomitas", "precio": 15.0, "stock": 35},
-            {"nombre": "Donitas Sal y Limón", "marca": "Totis", "categoria": "Frituras", "precio": 6.0, "stock": 60},
-            {"nombre": "Donitas Picantes", "marca": "Totis", "categoria": "Frituras", "precio": 5.0, "stock": 55},
-        ]
+    def obtener_proveedores(self):
+        query = "SELECT id_proveedor as id, empresa as nombre, telefono, correo FROM PROVEEDORES"
+        return self._ejecutar_consulta(query, fetchall=True) or []
+    
+    def editar_proveedor(self, proveedor_id, telefono, correo):
+        query = "UPDATE PROVEEDORES SET telefono = %s, correo = %s WHERE id_proveedor = %s"
+        self._ejecutar_consulta(query, (telefono, correo, proveedor_id))
+        return True
+    
+    def eliminar_proveedor(self, proveedor_id):
+        self._ejecutar_consulta("UPDATE PRODUCTOS SET id_proveedor = NULL WHERE id_proveedor = %s", (proveedor_id,))
+        self._ejecutar_consulta("DELETE FROM PROVEEDORES WHERE id_proveedor = %s", (proveedor_id,))
+        return True
+
+    # ---------------- Productos (Inventario) ----------------
+    def _obtener_o_crear_fk(self, tabla, columna_id, columna_nombre, valor):
+        query_sel = f"SELECT {columna_id} FROM {tabla} WHERE {columna_nombre} = %s"
+        res = self._ejecutar_consulta(query_sel, (valor,), fetch=True)
+        if res: return res[columna_id]
+        self._ejecutar_consulta(f"INSERT INTO {tabla} ({columna_nombre}) VALUES (%s)", (valor,))
+        return self._ejecutar_consulta(query_sel, (valor,), fetch=True)[columna_id]
 
     def agregar_producto(self, nombre, marca, categoria, precio, stock, proveedor_id=None):
-        if not nombre or not nombre.strip():
-            return "nombre_vacio"
-        if any(p["nombre"].lower() == nombre.strip().lower() for p in self.inventario):
+        if not nombre or not nombre.strip(): return "nombre_vacio"
+        if self._ejecutar_consulta("SELECT id_producto FROM PRODUCTOS WHERE nombre_dulce = %s", (nombre,), fetch=True):
             return "ya_existe"
-        if precio <= 0 or stock < 0:
-            return "datos_invalidos"
+        if float(precio) <= 0 or int(stock) < 0: return "datos_invalidos"
 
-        self.inventario.append({
-            "nombre": nombre.strip(),
-            "marca": marca.strip() or "Genérica",
-            "categoria": categoria.strip() or "General",
-            "precio": float(precio),
-            "stock": int(stock),
-            "proveedor_id": proveedor_id
-        })
-        self.guardar_inventario()
+        id_marca = self._obtener_o_crear_fk("MARCAS", "id_marca", "nombre_marca", marca.strip() or "Genérica")
+        id_categoria = self._obtener_o_crear_fk("CATEGORIAS", "id_categoria", "nombre_categoria", categoria.strip() or "General")
+
+        query = """
+            INSERT INTO PRODUCTOS (nombre_dulce, precio_venta, stock_actual, stock_minimo, activo, id_categoria, id_marca, id_proveedor)
+            VALUES (%s, %s, %s, 5, 1, %s, %s, %s)
+        """
+        self._ejecutar_consulta(query, (nombre.strip(), float(precio), int(stock), id_categoria, id_marca, proveedor_id))
         return True
     
     def eliminar_producto(self, nombre_producto):
-        producto = next((p for p in self.inventario if p["nombre"] == nombre_producto), None)
-        if producto:
-            self.inventario.remove(producto)
-            self.guardar_inventario()
-            return True
-        return False
+        query = "UPDATE PRODUCTOS SET activo = 0 WHERE nombre_dulce = %s"
+        self._ejecutar_consulta(query, (nombre_producto,))
+        return True
 
     def editar_producto(self, nombre_original, nuevos_datos):
-        producto = next((p for p in self.inventario if p["nombre"] == nombre_original), None)
-        if producto:
-            producto["nombre"] = nuevos_datos.get("nombre", producto["nombre"])
-            producto["marca"] = nuevos_datos.get("marca", producto["marca"])
-            producto["categoria"] = nuevos_datos.get("categoria", producto["categoria"])
-            producto["precio"] = float(nuevos_datos.get("precio", producto["precio"]))
-            producto["stock"] = int(nuevos_datos.get("stock", producto["stock"]))
-            self.guardar_inventario()
-            return True
-        return False
+        id_marca = self._obtener_o_crear_fk("MARCAS", "id_marca", "nombre_marca", nuevos_datos["marca"])
+        id_categoria = self._obtener_o_crear_fk("CATEGORIAS", "id_categoria", "nombre_categoria", nuevos_datos["categoria"])
+        
+        query = """
+            UPDATE PRODUCTOS SET nombre_dulce = %s, precio_venta = %s, stock_actual = %s, 
+            id_marca = %s, id_categoria = %s WHERE nombre_dulce = %s
+        """
+        self._ejecutar_consulta(query, (
+            nuevos_datos["nombre"], float(nuevos_datos["precio"]), int(nuevos_datos["stock"]),
+            id_marca, id_categoria, nombre_original
+        ))
+        return True
 
-    # ---------------- Usuarios y Roles ----------------
-    def validar_usuario(self, usuario, password):
-        return usuario in self.usuarios and self.usuarios[usuario] == password
+    def obtener_inventario_filtrado(self, texto_busqueda, marca, categoria):
+        query = """
+            SELECT p.nombre_dulce as nombre, m.nombre_marca as marca, c.nombre_categoria as categoria, 
+                   p.precio_venta as precio, p.stock_actual as stock, pr.empresa as proveedor
+            FROM PRODUCTOS p
+            LEFT JOIN MARCAS m ON p.id_marca = m.id_marca
+            LEFT JOIN CATEGORIAS c ON p.id_categoria = c.id_categoria
+            LEFT JOIN PROVEEDORES pr ON p.id_proveedor = pr.id_proveedor
+            WHERE p.activo = 1 AND p.nombre_dulce LIKE %s
+        """
+        params = [f"%{texto_busqueda}%"]
+        if marca != "Todas":
+            query += " AND m.nombre_marca = %s"
+            params.append(marca)
+        if categoria != "Todas":
+            query += " AND c.nombre_categoria = %s"
+            params.append(categoria)
 
-    def obtener_rol(self, usuario):
-        return self.roles.get(usuario, "Cajero")
+        resultados_db = self._ejecutar_consulta(query, tuple(params), fetchall=True) or []
+        resultados = []
+        for prod in resultados_db:
+            estado = "AGOTADO" if prod["stock"] == 0 else "BAJO" if prod["stock"] < 15 else "MEDIO"
+            prod["estado"] = estado
+            prod["proveedor"] = prod["proveedor"] or "—"
+            resultados.append(prod)
+        return resultados
 
     # ---------------- Ticket y Ventas ----------------
     def agregar_al_ticket(self, nombre_producto, cantidad):
-        dulce = next((d for d in self.inventario if d["nombre"] == nombre_producto), None)
-        if not dulce:
-            return "no_encontrado"
+        query = "SELECT precio_venta, stock_actual FROM PRODUCTOS WHERE nombre_dulce = %s AND activo = 1"
+        dulce = self._ejecutar_consulta(query, (nombre_producto,), fetch=True)
+        if not dulce: return "no_encontrado"
 
         item_en_ticket = next((item for item in self.ticket_actual if item["producto"] == nombre_producto), None)
         cantidad_actual = item_en_ticket["cantidad"] if item_en_ticket else 0
         
-        if (cantidad_actual + cantidad) > dulce["stock"]:
-            return "stock_insuficiente"
+        if (cantidad_actual + cantidad) > dulce["stock_actual"]: return "stock_insuficiente"
 
         if item_en_ticket:
             item_en_ticket["cantidad"] += cantidad
-            item_en_ticket["subtotal"] = item_en_ticket["cantidad"] * dulce["precio"]
+            item_en_ticket["subtotal"] = item_en_ticket["cantidad"] * float(dulce["precio_venta"])
         else:
             self.ticket_actual.append({
-                "producto": nombre_producto,
-                "cantidad": cantidad,
-                "subtotal": dulce["precio"] * cantidad
+                "producto": nombre_producto, "cantidad": cantidad, 
+                "subtotal": float(dulce["precio_venta"]) * cantidad
             })
         return True
          
@@ -192,39 +163,10 @@ class ModeloDulceria:
         total = self.calcular_total()
         if pago_cliente >= total:
             cambio = pago_cliente - total
-            for item_ticket in self.ticket_actual:
-                for dulce in self.inventario:
-                    if dulce["nombre"] == item_ticket["producto"]:
-                        dulce["stock"] -= item_ticket["cantidad"]
+            # Guardado atómico del descuento de stock en BD
+            for item in self.ticket_actual:
+                query = "UPDATE PRODUCTOS SET stock_actual = stock_actual - %s WHERE nombre_dulce = %s"
+                self._ejecutar_consulta(query, (item["cantidad"], item["producto"]))
             self.ticket_actual.clear()
-            self.guardar_inventario() 
             return True, cambio
         return False, 0.0
-
-    def obtener_inventario_filtrado(self, texto_busqueda, marca, categoria):
-        resultados = []
-        for producto in self.inventario:
-            coincide_nombre = texto_busqueda in producto["nombre"].lower()
-            coincide_marca = marca == "Todas" or producto["marca"] == marca
-            coincide_cat = categoria == "Todas" or producto["categoria"] == categoria
-            prov = self.obtener_proveedor(producto.get("proveedor_id"))
-            nombre_prov = prov["nombre"] if prov else "—"
-
-            if coincide_nombre and coincide_marca and coincide_cat:
-                if producto["stock"] == 0:
-                    estado = "AGOTADO"
-                elif producto["stock"] < 15:
-                    estado = "BAJO"
-                else:
-                    estado = "MEDIO"
-
-                resultados.append({
-                    "nombre": producto["nombre"],
-                    "marca": producto["marca"],
-                    "categoria": producto["categoria"],
-                    "precio": producto["precio"],
-                    "stock": producto["stock"],
-                    "estado": estado,
-                    "proveedor": nombre_prov
-                })
-        return resultados

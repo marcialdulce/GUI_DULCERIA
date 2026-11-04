@@ -4,7 +4,6 @@ from vistas import estilos
 from vistas.panel_inicio import PanelInicio
 from vistas.panel_ventas import PanelVentas
 from vistas.panel_cobros import PanelCobros           
-from vistas.panel_devoluciones import PanelDevoluciones 
 from vistas.panel_tickets import PanelTickets        
 from vistas.panel_inventario import PanelInventario
 from vistas.panel_apartados import PanelApartados
@@ -87,7 +86,6 @@ class MenuPrincipal(tk.Frame):
             "HISTORIAL": lambda: PanelHistorial(self.contenido, self.controlador),
             "HISTORIAL DE VENTAS": lambda: PanelHistorial(self.contenido, self.controlador),
             "TICKETS": lambda: PanelTickets(self.contenido, self.controlador),
-            "DEVOLUCIONES": lambda: PanelDevoluciones(self.contenido, self.controlador),
             "CIERRE DE CAJA": lambda: PanelCierreCaja(self.contenido, self.controlador)
         }
 

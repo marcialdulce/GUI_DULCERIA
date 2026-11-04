@@ -8,7 +8,6 @@ from modelos.modelo import ModeloDulceria
 from servicios.hilo_factura import HiloFactura
 from servicios.repositorio_ventas import RepositorioVentas
 from servicios.tareas_ventas import TareaCargarVentas, TareaExportarReporte
-from servicios.devoluciones import ServicioDevoluciones
 from vistas.ventana_principal import VistaDulceria
 
 
@@ -22,8 +21,6 @@ class ControladorDulceria:
 
         self.pedidos_activos = []
         self.repo_ventas = RepositorioVentas()
-        self.servicio_devoluciones = ServicioDevoluciones()
-        
         self.cola_tareas = queue.Queue()
         self.hilo_carga = None
         self.hilo_export = None
@@ -50,7 +47,7 @@ class ControladorDulceria:
 
             # El controlador decide las opciones
             if self.rol_actual == "Cajero":
-                opciones = ["PUNTO DE VENTA", "COBROS Y PAGOS", "TICKETS", "HISTORIAL DE VENTAS", "DEVOLUCIONES", "CIERRE DE CAJA"]
+                opciones = ["PUNTO DE VENTA", "COBROS Y PAGOS", "TICKETS", "HISTORIAL DE VENTAS",  "CIERRE DE CAJA"]
             else:
                 opciones = ["INICIO", "NUEVA VENTA", "INVENTARIO", "APARTADOS", "PROVEEDORES", "HISTORIAL"]
 
@@ -332,56 +329,6 @@ class ControladorDulceria:
             "duracion": f"{horas:02d} horas, {minutos:02d} minutos y {segundos:02d} segundos",
             "efectivo_esperado": efectivo_esperado 
         }
-    
-    def obtener_ventas_para_devolucion(self):
-        return self.repo_ventas.obtener_todas()
-
-    def obtener_cantidades_devueltas(self):
-        return self.servicio_devoluciones.obtener_cantidades_devueltas()
-
-    def registrar_devolucion(self, venta, producto, cantidad, motivo):
-        autorizador = self.usuario_actual
-        
-        if self.rol_actual == "Cajero":
-            usuario_admin = simpledialog.askstring("Autorización", "Usuario del Administrador:")
-            if not usuario_admin: return False, "Autorización cancelada."
-            
-            pass_admin = simpledialog.askstring("Autorización", "Contraseña del Administrador:", show="*")
-            if not pass_admin: return False, "Autorización cancelada."
-            
-            # Validación estricta contra el modelo
-            es_valido = self.modelo.validar_usuario(usuario_admin, pass_admin)
-            rol_admin = self.modelo.obtener_rol(usuario_admin)
-            
-            if not es_valido or rol_admin != "Administrador":
-                return False, "Credenciales incorrectas o el usuario no es Administrador. Devolución cancelada."
-            
-            autorizador = usuario_admin # Queda registrado quién autorizó realmente
-        
-        if cantidad <= 0: return False, "La cantidad debe ser mayor que cero."
-        articulo = next((a for a in venta.get("articulos", []) if a.get("producto") == producto), None)
-        if not articulo: return False, "El producto no pertenece a esa venta."
-        
-        devueltos = self.obtener_cantidades_devueltas()
-        clave = (venta.get("folio"), producto)
-        disponible = int(articulo.get("cantidad", 0)) - devueltos.get(clave, 0)
-        
-        if cantidad > disponible: return False, f"Solo puedes devolver {disponible} unidad(es)."
-        
-        inventario = next((p for p in self.modelo.inventario if p.get("nombre") == producto), None)
-        if inventario is None: return False, "El producto ya no existe en el inventario."
-        
-        subtotal = float(articulo.get("subtotal", 0))
-        precio_unitario = subtotal / max(int(articulo.get("cantidad", 1)), 1)
-        importe = round(precio_unitario * cantidad, 2)
-        
-        devolucion = self.servicio_devoluciones.registrar(
-            venta.get("folio"), producto, cantidad, importe, motivo, autorizador
-        )
-        
-        inventario["stock"] = int(inventario.get("stock", 0)) + cantidad
-        self.modelo.guardar_inventario()
-        return True, devolucion
 
     def cerrar_sesion(self):
         self.modelo.ticket_actual.clear()
