@@ -20,6 +20,7 @@ class ModeloDulceria:
             if conexion.is_connected():
                 cursor.close()
                 conexion.close()
+                
 
     # ---------------- Usuarios y Roles ----------------
     def validar_usuario(self, username, password):
@@ -40,6 +41,7 @@ class ModeloDulceria:
         query = "SELECT id_usuario FROM USUARIOS WHERE username = %s"
         resultado = self._ejecutar_consulta(query, (username,), fetch=True)
         return resultado["id_usuario"] if resultado else None
+    
 
     # ---------------- Proveedores ----------------
     def agregar_proveedor(self, nombre, telefono="", correo=""):
@@ -63,6 +65,36 @@ class ModeloDulceria:
     def eliminar_proveedor(self, proveedor_id):
         self._ejecutar_consulta("UPDATE PRODUCTOS SET id_proveedor = NULL WHERE id_proveedor = %s", (proveedor_id,))
         self._ejecutar_consulta("DELETE FROM PROVEEDORES WHERE id_proveedor = %s", (proveedor_id,))
+        return True
+    
+    
+        # ---------------- Pedidos a Proveedor ----------------
+    def registrar_pedido_proveedor(self, nombre_producto, cantidad, username):
+        id_usuario = self.obtener_id_usuario(username)
+        # Buscamos el ID del producto y del proveedor
+        query_prod = "SELECT id_producto, id_proveedor FROM PRODUCTOS WHERE nombre_dulce = %s"
+        prod = self._ejecutar_consulta(query_prod, (nombre_producto,), fetch=True)
+        
+        if not prod: return False
+        
+        query = """
+            INSERT INTO PEDIDOS_PROVEEDOR (cantidad, id_producto, id_proveedor, id_usuario)
+            VALUES (%s, %s, %s, %s)
+        """
+        self._ejecutar_consulta(query, (cantidad, prod["id_producto"], prod["id_proveedor"], id_usuario))
+        return True
+
+    def obtener_pedidos_proveedor(self):
+        query = """
+            SELECT pp.id_pedido, p.nombre_dulce as producto, pp.cantidad, pp.estado
+            FROM PEDIDOS_PROVEEDOR pp
+            JOIN PRODUCTOS p ON pp.id_producto = p.id_producto
+            WHERE pp.estado = 'Pendiente'
+        """
+        return self._ejecutar_consulta(query, fetchall=True) or []
+
+    def eliminar_pedido_proveedor(self, id_pedido):
+        self._ejecutar_consulta("DELETE FROM PEDIDOS_PROVEEDOR WHERE id_pedido = %s", (id_pedido,))
         return True
 
     # ---------------- Productos (Inventario) ----------------
@@ -134,6 +166,7 @@ class ModeloDulceria:
             prod["proveedor"] = prod["proveedor"] or "—"
             resultados.append(prod)
         return resultados
+    
 
     # ---------------- Ticket y Ventas ----------------
     def agregar_al_ticket(self, nombre_producto, cantidad):
@@ -171,6 +204,7 @@ class ModeloDulceria:
             return True, cambio
         return False, 0.0
     
+    
         # ---------------- Turnos y Cajas ----------------
     def abrir_turno(self, username):
         id_usuario = self.obtener_id_usuario(username)
@@ -189,5 +223,19 @@ class ModeloDulceria:
             WHERE id_turno = %s
         """
         self._ejecutar_consulta(query, (efectivo_contado, efectivo_esperado, diferencia, id_turno))
+        
+        
+            # ---------------- Apartados ----------------
+    def obtener_apartados(self):
+        # Agrupamos los detalles para que el panel de la vista los pueda leer fácil
+        query = """
+            SELECT a.id_apartado, a.nombre_cliente as nombre, a.fecha_entrega as fecha, 
+                   a.estado, p.nombre_dulce as producto, p.precio_venta as precio,
+                   da.cantidad as unidades
+            FROM APARTADOS a
+            JOIN DETALLES_APARTADOS da ON a.id_apartado = da.id_apartado
+            JOIN PRODUCTOS p ON da.id_producto = p.id_producto
+        """
+        return self._ejecutar_consulta(query, fetchall=True) or []
         
     

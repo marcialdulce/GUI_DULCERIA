@@ -21,7 +21,9 @@ class PanelApartados(tk.Frame):
             hasattr(self.controlador, "apartados")
             and self.controlador.apartados
         ):
-            self.apartados = self.controlador.apartados
+            self.apartados = self.controlador.obtener_lista_apartados()
+            for a in self.apartados:
+                  a["precio"] = f"${a['precio']:.2f}"
         else:
             self.apartados = [
                 {

@@ -19,7 +19,6 @@ class ControladorDulceria:
         self.rol_actual = None
         self.inicio_sesion = None
 
-        self.pedidos_activos = []
         self.repo_ventas = RepositorioVentas()
         self.cola_tareas = queue.Queue()
         self.hilo_carga = None
@@ -293,6 +292,18 @@ class ControladorDulceria:
         self.modelo.eliminar_proveedor(proveedor_id)
         return True
 
+    def registrar_pedido_manual(self, nombre_producto, cantidad):
+        exito = self.modelo.registrar_pedido_proveedor(nombre_producto, cantidad, self.usuario_actual)
+        if exito:
+            return True, f"Se han solicitado {cantidad} unidades de {nombre_producto}."
+        return False, "Error al registrar el pedido."
+
+    def obtener_pedidos_activos(self):
+        return self.modelo.obtener_pedidos_proveedor()
+
+    def cancelar_pedido(self, id_pedido):
+        return self.modelo.eliminar_pedido_proveedor(id_pedido)
+
     def procesar_nuevo_producto(self, nombre, marca, categoria, precio, stock, proveedor_id=None):
         
         if self.rol_actual != "Administrador":
@@ -332,6 +343,13 @@ class ControladorDulceria:
             "duracion": f"{horas:02d} horas, {minutos:02d} minutos y {segundos:02d} segundos",
             "efectivo_esperado": efectivo_esperado 
         }
+        
+    def obtener_lista_apartados(self):
+        return self.modelo.obtener_apartados()
+    
+    def vaciar_ticket_actual(self):
+        """Vacía el carrito de compras actual desde el modelo."""
+        self.modelo.ticket_actual.clear()
 
     def cerrar_sesion(self, efectivo_fisico=None):
         # Si se envió el efectivo_fisico desde el panel de cierre de caja, lo guardamos
@@ -350,6 +368,3 @@ class ControladorDulceria:
         login_screen.entry_usuario.delete(0, "end")
         login_screen.entry_pass.delete(0, "end")
         
-    def vaciar_ticket_actual(self):
-        """Vacía el carrito de compras actual desde el modelo."""
-        self.modelo.ticket_actual.clear()
