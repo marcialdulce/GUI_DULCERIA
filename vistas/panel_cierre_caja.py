@@ -66,4 +66,4 @@ class PanelCierreCaja(tk.Frame):
         else:
             messagebox.showerror("Cierre Registrado", "El arqueo ha sido registrado con un faltante en caja. Esto será notificado al Administrador.")
             
-        self.controlador.cerrar_sesion()
+        self.controlador.cerrar_sesion(efectivo_fisico)

@@ -170,3 +170,24 @@ class ModeloDulceria:
             self.ticket_actual.clear()
             return True, cambio
         return False, 0.0
+    
+        # ---------------- Turnos y Cajas ----------------
+    def abrir_turno(self, username):
+        id_usuario = self.obtener_id_usuario(username)
+        if not id_usuario: return None
+        
+        # Asumimos que la caja 1 es la principal (ya insertada en el SQL)
+        query = "INSERT INTO TURNOS_CAJA (id_usuario, id_caja) VALUES (%s, 1)"
+        id_turno = self._ejecutar_consulta(query, (id_usuario,))
+        return id_turno
+
+    def cerrar_turno(self, id_turno, efectivo_contado, efectivo_esperado):
+        diferencia = float(efectivo_contado) - float(efectivo_esperado)
+        query = """
+            UPDATE TURNOS_CAJA 
+            SET fecha_hora_fin = NOW(), efectivo_contado = %s, efectivo_esperado = %s, diferencia = %s 
+            WHERE id_turno = %s
+        """
+        self._ejecutar_consulta(query, (efectivo_contado, efectivo_esperado, diferencia, id_turno))
+        
+    

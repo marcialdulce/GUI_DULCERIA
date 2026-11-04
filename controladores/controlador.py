@@ -56,6 +56,9 @@ class ControladorDulceria:
         else:
             self.vista.mostrar_alerta("Datos incorrectos", "Las claves de acceso o los datos ingresados no son correctos.\nPor favor, intente nuevamente.", "error")
             self.vista.pantallas["PantallaLogin"].entry_pass.delete(0, "end")
+            
+        # Abrimos el turno en la BD
+        self.id_turno_actual = self.modelo.abrir_turno(usuario)
 
     def procesar_cobro_avanzado(self, tipo_pago, datos_factura):
         total = self.modelo.calcular_total()
@@ -330,7 +333,13 @@ class ControladorDulceria:
             "efectivo_esperado": efectivo_esperado 
         }
 
-    def cerrar_sesion(self):
+    def cerrar_sesion(self, efectivo_fisico=None):
+        # Si se envió el efectivo_fisico desde el panel de cierre de caja, lo guardamos
+        if efectivo_fisico is not None and hasattr(self, 'id_turno_actual') and self.id_turno_actual:
+            resumen = self.obtener_resumen_cierre_caja()
+            self.modelo.cerrar_turno(self.id_turno_actual, efectivo_fisico, resumen["efectivo_esperado"])
+            self.id_turno_actual = None
+
         self.modelo.ticket_actual.clear()
         self.usuario_actual = None
         self.rol_actual = None
