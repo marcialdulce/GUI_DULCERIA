@@ -227,9 +227,9 @@ class ModeloDulceria:
         
             # ---------------- Apartados ----------------
     def obtener_apartados(self):
-        # Agrupamos los detalles para que el panel de la vista los pueda leer fácil
         query = """
-            SELECT a.id_apartado, a.nombre_cliente as nombre, a.fecha_entrega as fecha, 
+            SELECT a.id_apartado, a.nombre_cliente as nombre, 
+                   DATE_FORMAT(a.fecha_entrega, '%d/%m/%Y') as fecha,
                    a.estado, p.nombre_dulce as producto, p.precio_venta as precio,
                    da.cantidad as unidades
             FROM APARTADOS a
@@ -237,5 +237,4 @@ class ModeloDulceria:
             JOIN PRODUCTOS p ON da.id_producto = p.id_producto
         """
         return self._ejecutar_consulta(query, fetchall=True) or []
-        
     

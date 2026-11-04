@@ -105,5 +105,8 @@ class RepositorioVentas:
         cursor.close()
         conexion.close()
 
+
     def obtener_todas(self):
-        return list(v for v, _ in self.iterar(float('inf')))
+        conexion = self.conexion_bd.conectar()
+        cursor = conexion.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM VENTAS ORDER BY id_venta DESC")

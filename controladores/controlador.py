@@ -40,6 +40,10 @@ class ControladorDulceria:
             self.rol_actual = self.modelo.obtener_rol(usuario)
             self.inicio_sesion = datetime.now()
             
+            
+            self.id_turno_actual = self.modelo.abrir_turno(usuario)
+            
+            
             self.vista.mostrar_alerta("Inicio de sesión", f"¡Bienvenido/a, {usuario}!", "info")
             self.vista.pantallas["PantallaLogin"].entry_usuario.delete(0, "end")
             self.vista.pantallas["PantallaLogin"].entry_pass.delete(0, "end")
@@ -56,9 +60,7 @@ class ControladorDulceria:
             self.vista.mostrar_alerta("Datos incorrectos", "Las claves de acceso o los datos ingresados no son correctos.\nPor favor, intente nuevamente.", "error")
             self.vista.pantallas["PantallaLogin"].entry_pass.delete(0, "end")
             
-        # Abrimos el turno en la BD
-        self.id_turno_actual = self.modelo.abrir_turno(usuario)
-
+        
     def procesar_cobro_avanzado(self, tipo_pago, datos_factura):
         total = self.modelo.calcular_total()
         if total == 0:
@@ -93,17 +95,17 @@ class ControladorDulceria:
         return total
 
     def _registrar_venta_historial(self, tipo_pago, total, carrito, datos_factura):
-        """Extrae la lógica de guardar en el archivo JSON."""
         try:
             self.repo_ventas.registrar(
                 metodo_pago=tipo_pago,
                 total=total,
                 articulos=carrito,
                 facturado=bool(datos_factura and datos_factura.get("requiere")),
+                 usuario_actual=self.usuario_actual
             )
             return ""
-        except OSError as e:
-            return f"\n\nAviso: la venta no se pudo guardar en el historial ({e.strerror or e})."
+        except Exception as e: 
+            return f"\n\nAviso: la venta no se pudo guardar ({str(e)})."
 
     def _iniciar_hilo_factura(self, datos_factura, total, carrito, tipo_pago, pago, cambio):
         """Extrae la lógica de la ventana de guardado y la creación del Hilo."""
@@ -247,27 +249,26 @@ class ControladorDulceria:
         return False, "Error al intentar actualizar el producto."
         
     def obtener_datos_ventas(self):
-        return self.modelo.inventario, self.modelo.ticket_actual, self.modelo.calcular_total()
+        # Trae el inventario actualizado desde MySQL
+        inventario_bd = self.modelo.obtener_inventario_filtrado("", "Todas", "Todas")
+        return inventario_bd, self.modelo.ticket_actual, self.modelo.calcular_total()
 
     def solicitar_proveedor(self, nombre_producto, stock_actual):
-    # Agregamos {stock_actual} al mensaje
-      mensaje = f"¿Deseas abastecer {nombre_producto}?\n\nStock actual: {stock_actual} unidades."
-      
-      if messagebox.askyesno("Pedido a Proveedor", mensaje):
-        nuevo_id = max([p["id"] for p in self.pedidos_activos], default=0) + 1
-        self.pedidos_activos.append({
-            "id": nuevo_id,
-            "producto": nombre_producto,
-            "cantidad": 50,
-            "estado": "Pendiente",
-        })
-        messagebox.showinfo("Éxito", f"Pedido enviado para {nombre_producto}.")
+        mensaje = f"¿Deseas abastecer {nombre_producto}?\n\nStock actual: {stock_actual} unidades."
+        
+        if messagebox.askyesno("Pedido a Proveedor", mensaje):
+            exito = self.modelo.registrar_pedido_proveedor(nombre_producto, 50, self.usuario_actual)
+            
+            if exito:
+                messagebox.showinfo("Éxito", f"Pedido enviado para {nombre_producto} y guardado en la BD.")
+            else:
+                messagebox.showerror("Error", "No se pudo guardar el pedido en la base de datos.")
 
     def procesar_filtro_inventario(self, texto, marca, categoria):
         return self.modelo.obtener_inventario_filtrado(texto, marca, categoria)
 
     def obtener_proveedores(self):
-        return self.modelo.proveedores
+        return self.modelo.obtener_proveedores()
 
     def procesar_nuevo_proveedor(self, nombre, telefono, correo):
         
@@ -317,7 +318,7 @@ class ControladorDulceria:
         if resultado == "datos_invalidos": return False, "Precio > 0 y stock >= 0."
         return True, f"Producto '{nombre}' agregado."
 
-    # --- MÉTODOS EXCLUSIVOS DEL CAJERO ---
+       # --- MÉTODOS EXCLUSIVOS DEL CAJERO ---
     def obtener_resumen_cierre_caja(self):
         fin = datetime.now()
         inicio = self.inicio_sesion or fin
@@ -331,10 +332,15 @@ class ControladorDulceria:
         efectivo_esperado = 0.0
         
         for v in ventas_turno:
-            # Verificamos si la venta se hizo en este turno (después de inicio_sesion)
-            fecha_venta = datetime.strptime(v["fecha"], "%Y-%m-%d %H:%M:%S")
-            if fecha_venta >= inicio and v["metodo_pago"] == "Efectivo":
-                efectivo_esperado += float(v["total"])
+            try:
+                # Tomamos solo los primeros 19 caracteres: "YYYY-MM-DD HH:MM:SS"
+                fecha_texto = str(v["fecha"])[:19]
+                fecha_venta = datetime.strptime(fecha_texto, "%Y-%m-%d %H:%M:%S")
+                
+                if fecha_venta >= inicio and v["metodo_pago"] == "Efectivo":
+                    efectivo_esperado += float(v["total"])
+            except Exception:
+                continue # Si una fecha falla, la ignoramos y seguimos con la siguiente
 
         return {
             "usuario": self.usuario_actual or "",
