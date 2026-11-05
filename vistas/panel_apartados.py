@@ -1,7 +1,3 @@
-# ============================================================
-# PANEL DE APARTADOS
-# HILO 5 - GESTIÓN DE APARTADOS PENDIENTES
-# ============================================================
 
 import queue
 import threading
@@ -16,41 +12,14 @@ class PanelApartados(tk.Frame):
         super().__init__(parent, bg="#F9F4F0")
         self.controlador = controlador
 
-        # Datos de prueba o desde el controlador
-        if (
-            hasattr(self.controlador, "apartados")
-            and self.controlador.apartados
-        ):
+        # Datos reales desde MySQL (antes: solo si existía controlador.apartados, que nunca existía)
+        try:
             self.apartados = self.controlador.obtener_lista_apartados()
-            for a in self.apartados:
-                  a["precio"] = f"${a['precio']:.2f}"
-        else:
-            self.apartados = [
-                {
-                    "producto": "Gomitas",
-                    "nombre": "Ana López",
-                    "fecha": "21/10/2026",
-                    "precio": "$15.00",
-                    "unidades": 2,
-                    "estado": "Pendiente",
-                },
-                {
-                    "producto": "Chocolate",
-                    "nombre": "Luis Pérez",
-                    "fecha": "23/10/2026",
-                    "precio": "$12.00",
-                    "unidades": 4,
-                    "estado": "Pendiente",
-                },
-                {
-                    "producto": "Panditas",
-                    "nombre": "María Ruiz",
-                    "fecha": "30/10/2026",
-                    "precio": "$20.00",
-                    "unidades": 1,
-                    "estado": "Pendiente",
-                },
-            ]
+        except Exception as e:
+            messagebox.showerror("Apartados", f"No se pudieron leer los apartados:\n{e}")
+            self.apartados = []
+        for a in self.apartados:
+            a["precio"] = f"${float(a['precio']):.2f}"
 
         self.lock = threading.Lock()
         self.cola_resultados = queue.Queue()

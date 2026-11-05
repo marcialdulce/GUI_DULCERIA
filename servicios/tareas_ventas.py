@@ -75,6 +75,7 @@ class TareaCargarVentas:
         self.cancelar = cancelar              # threading.Event: "por favor, detente"
         self.fecha_filtro = fecha_filtro      # prefijo: "2026", "2026-10" o "2026-10-18"
         self.tam_bloque = tam_bloque
+        self.usuario_filtro = usuario_filtro  # un cajero solo ve SUS ventas
 
     def _avisar(self, tipo, **datos):
         self.cola.put({"tarea": "carga", "tipo": tipo, **datos})
@@ -82,12 +83,12 @@ class TareaCargarVentas:
     def run(self):
         inicio = time.perf_counter()
         try:
-            limite = self.repo.tamano_actual()
+            limite = self.repo.tamano_actual(self.usuario_filtro)
             resumen = ResumenVentas(fecha_filtro=self.fecha_filtro)
             ultimas = deque(maxlen=MAX_FILAS_TABLA)
             leidas = 0
 
-            for venta, bytes_leidos in self.repo.iterar(limite):
+            for venta, bytes_leidos in self.repo.iterar(limite, self.usuario_filtro):
                 leidas += 1
                 
                 # 1. Delegamos el procesamiento de la venta a una función auxiliar

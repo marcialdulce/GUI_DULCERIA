@@ -1,4 +1,7 @@
 from modelos.conexion import ConexionBD
+from seguridad import verificar_password
+
+UMBRAL_STOCK_BAJO = 15   # misma regla que usa la vista de inventario
 
 class ModeloDulceria:
     def __init__(self):
@@ -6,27 +9,30 @@ class ModeloDulceria:
         self.ticket_actual = [] 
         
     def _ejecutar_consulta(self, query, parametros=None, fetch=False, fetchall=False):
+        """SELECT -> dict / lista de dicts.  INSERT/UPDATE/DELETE -> lastrowid (o True)."""
         conexion = self.conexion_bd.conectar()
         if not conexion: return None
+        cursor = None
         try:
             cursor = conexion.cursor(dictionary=True)
             cursor.execute(query, parametros or ())
-            resultado = None
-            if fetch: resultado = cursor.fetchone()
-            elif fetchall: resultado = cursor.fetchall()
-            else: conexion.commit()
-            return resultado
+            if fetch: return cursor.fetchone()
+            if fetchall: return cursor.fetchall()
+            conexion.commit()
+            return cursor.lastrowid or True      # <- antes devolvía None
+        except Exception:
+            conexion.rollback()
+            raise
         finally:
-            if conexion.is_connected():
-                cursor.close()
-                conexion.close()
+            if cursor: cursor.close()
+            if conexion.is_connected(): conexion.close()
                 
 
     # ---------------- Usuarios y Roles ----------------
     def validar_usuario(self, username, password):
-        query = "SELECT id_usuario FROM USUARIOS WHERE username = %s AND contraseña = %s AND estatus = 'Activo'"
-        usuario = self._ejecutar_consulta(query, (username, password), fetch=True)
-        return usuario is not None
+        query = "SELECT `contraseña` AS clave FROM USUARIOS WHERE username = %s AND estatus = 'Activo'"
+        usuario = self._ejecutar_consulta(query, (username,), fetch=True)
+        return bool(usuario) and verificar_password(password, usuario["clave"])
 
     def obtener_rol(self, username):
         query = """
@@ -94,8 +100,42 @@ class ModeloDulceria:
         return self._ejecutar_consulta(query, fetchall=True) or []
 
     def eliminar_pedido_proveedor(self, id_pedido):
-        self._ejecutar_consulta("DELETE FROM PEDIDOS_PROVEEDOR WHERE id_pedido = %s", (id_pedido,))
+        self._ejecutar_consulta("UPDATE PEDIDOS_PROVEEDOR SET estado = 'Cancelado' WHERE id_pedido = %s AND estado = 'Pendiente'", (id_pedido,))
         return True
+
+    def recibir_pedido_proveedor(self, id_pedido):
+        """Marca el pedido como Recibido y SUMA la cantidad al stock (en una sola transacción)."""
+        con = self.conexion_bd.conectar()
+        if not con: return False
+        try:
+            cur = con.cursor(dictionary=True)
+            cur.execute("SELECT id_producto, cantidad FROM PEDIDOS_PROVEEDOR WHERE id_pedido=%s AND estado='Pendiente' FOR UPDATE", (id_pedido,))
+            ped = cur.fetchone()
+            if not ped: con.rollback(); return False
+            cur.execute("UPDATE PRODUCTOS SET stock_actual = stock_actual + %s WHERE id_producto = %s", (ped["cantidad"], ped["id_producto"]))
+            cur.execute("UPDATE PEDIDOS_PROVEEDOR SET estado='Recibido' WHERE id_pedido=%s", (id_pedido,))
+            con.commit()
+            return True
+        except Exception:
+            con.rollback(); raise
+        finally:
+            con.close()
+
+    def crear_pedidos_reposicion(self, username, cantidad=50):
+        """Reposición automática: un pedido Pendiente por cada producto bajo en stock que aún no tenga uno."""
+        id_usuario = self.obtener_id_usuario(username)
+        if not id_usuario: return 0
+        faltantes = self._ejecutar_consulta("""
+            SELECT p.id_producto, p.id_proveedor FROM PRODUCTOS p
+            WHERE p.activo = 1 AND p.stock_actual < %s
+              AND NOT EXISTS (SELECT 1 FROM PEDIDOS_PROVEEDOR pp
+                              WHERE pp.id_producto = p.id_producto AND pp.estado = 'Pendiente')
+        """, (UMBRAL_STOCK_BAJO,), fetchall=True) or []
+        for f in faltantes:
+            self._ejecutar_consulta(
+                "INSERT INTO PEDIDOS_PROVEEDOR (cantidad, id_producto, id_proveedor, id_usuario) VALUES (%s,%s,%s,%s)",
+                (cantidad, f["id_producto"], f["id_proveedor"], id_usuario))
+        return len(faltantes)
 
     # ---------------- Productos (Inventario) ----------------
     def _obtener_o_crear_fk(self, tabla, columna_id, columna_nombre, valor):
@@ -140,6 +180,14 @@ class ModeloDulceria:
         ))
         return True
 
+    @staticmethod
+    def _estado_stock(stock):
+        if stock == 0:
+            return "AGOTADO"
+        if stock < UMBRAL_STOCK_BAJO:
+            return "BAJO"
+        return "MEDIO"
+
     def obtener_inventario_filtrado(self, texto_busqueda, marca, categoria):
         query = """
             SELECT p.nombre_dulce as nombre, m.nombre_marca as marca, c.nombre_categoria as categoria, 
@@ -161,12 +209,25 @@ class ModeloDulceria:
         resultados_db = self._ejecutar_consulta(query, tuple(params), fetchall=True) or []
         resultados = []
         for prod in resultados_db:
-            estado = "AGOTADO" if prod["stock"] == 0 else "BAJO" if prod["stock"] < 15 else "MEDIO"
-            prod["estado"] = estado
+            prod["estado"] = self._estado_stock(prod["stock"])
             prod["proveedor"] = prod["proveedor"] or "—"
             resultados.append(prod)
         return resultados
     
+
+    @property
+    def inventario(self):
+        """Catálogo activo para PanelVentas / PanelInicio (claves: nombre, marca, categoria, precio, stock)."""
+        filas = self._ejecutar_consulta("""
+            SELECT p.nombre_dulce AS nombre, m.nombre_marca AS marca, c.nombre_categoria AS categoria,
+                   p.precio_venta AS precio, p.stock_actual AS stock
+            FROM PRODUCTOS p
+            LEFT JOIN MARCAS m ON p.id_marca = m.id_marca
+            LEFT JOIN CATEGORIAS c ON p.id_categoria = c.id_categoria
+            WHERE p.activo = 1 ORDER BY p.nombre_dulce
+        """, fetchall=True) or []
+        for f in filas: f["precio"] = float(f["precio"])
+        return filas
 
     # ---------------- Ticket y Ventas ----------------
     def agregar_al_ticket(self, nombre_producto, cantidad):
@@ -193,15 +254,11 @@ class ModeloDulceria:
         return sum(item["subtotal"] for item in self.ticket_actual)
 
     def procesar_cobro(self, pago_cliente):
+        """Solo valida el pago y calcula el cambio. El descuento de stock se hace dentro de la
+        MISMA transacción que guarda la venta (RepositorioVentas.registrar), así nunca quedan desfasados."""
         total = self.calcular_total()
         if pago_cliente >= total:
-            cambio = pago_cliente - total
-            # Guardado atómico del descuento de stock en BD
-            for item in self.ticket_actual:
-                query = "UPDATE PRODUCTOS SET stock_actual = stock_actual - %s WHERE nombre_dulce = %s"
-                self._ejecutar_consulta(query, (item["cantidad"], item["producto"]))
-            self.ticket_actual.clear()
-            return True, cambio
+            return True, pago_cliente - total
         return False, 0.0
     
     
@@ -210,10 +267,10 @@ class ModeloDulceria:
         id_usuario = self.obtener_id_usuario(username)
         if not id_usuario: return None
         
-        # Asumimos que la caja 1 es la principal (ya insertada en el SQL)
+        # Caja 1 = principal (la inserta 02_dulceria_datos_base.sql)
         query = "INSERT INTO TURNOS_CAJA (id_usuario, id_caja) VALUES (%s, 1)"
         id_turno = self._ejecutar_consulta(query, (id_usuario,))
-        return id_turno
+        return id_turno if id_turno is not True else None
 
     def cerrar_turno(self, id_turno, efectivo_contado, efectivo_esperado):
         diferencia = float(efectivo_contado) - float(efectivo_esperado)
@@ -225,16 +282,53 @@ class ModeloDulceria:
         self._ejecutar_consulta(query, (efectivo_contado, efectivo_esperado, diferencia, id_turno))
         
         
-            # ---------------- Apartados ----------------
+    # ---------------- Apartados ----------------
     def obtener_apartados(self):
         query = """
-            SELECT a.id_apartado, a.nombre_cliente as nombre, 
-                   DATE_FORMAT(a.fecha_entrega, '%d/%m/%Y') as fecha,
-                   a.estado, p.nombre_dulce as producto, p.precio_venta as precio,
-                   da.cantidad as unidades
+            SELECT a.id_apartado, a.nombre_cliente AS nombre,
+                   DATE_FORMAT(a.fecha_entrega, '%d/%m/%Y') AS fecha,
+                   a.estado, p.nombre_dulce AS producto, p.precio_venta AS precio,
+                   da.cantidad AS unidades
             FROM APARTADOS a
             JOIN DETALLES_APARTADOS da ON a.id_apartado = da.id_apartado
             JOIN PRODUCTOS p ON da.id_producto = p.id_producto
+            ORDER BY a.fecha_entrega
         """
-        return self._ejecutar_consulta(query, fetchall=True) or []
-    
+        filas = self._ejecutar_consulta(query, fetchall=True) or []
+        for f in filas: f["precio"] = float(f["precio"])
+        return filas
+
+    def registrar_apartado(self, nombre_cliente, fecha_entrega, anticipo, articulos, username):
+        """articulos = [{"producto": nombre, "cantidad": n}, ...]; fecha_entrega = 'AAAA-MM-DD'.
+        Guarda cabecera + detalles en una transacción. NO descuenta stock (se descuenta al entregar)."""
+        id_usuario = self.obtener_id_usuario(username)
+        if not id_usuario or not articulos: return None
+        con = self.conexion_bd.conectar()
+        if not con: return None
+        try:
+            cur = con.cursor(dictionary=True)
+            lineas, total = [], 0.0
+            for art in articulos:
+                cur.execute("SELECT id_producto, precio_venta FROM PRODUCTOS WHERE nombre_dulce=%s AND activo=1", (art["producto"],))
+                p = cur.fetchone()
+                if not p: raise ValueError(f"Producto no encontrado: {art['producto']}")
+                sub = float(p["precio_venta"]) * int(art["cantidad"])
+                total += sub
+                lineas.append((int(art["cantidad"]), sub, p["id_producto"]))
+            cur.execute("""INSERT INTO APARTADOS (nombre_cliente, fecha_entrega, anticipo, total, id_usuario)
+                           VALUES (%s,%s,%s,%s,%s)""", (nombre_cliente, fecha_entrega, float(anticipo), total, id_usuario))
+            id_apartado = cur.lastrowid
+            for cant, sub, id_prod in lineas:
+                cur.execute("INSERT INTO DETALLES_APARTADOS (cantidad, subtotal, id_apartado, id_producto) VALUES (%s,%s,%s,%s)",
+                            (cant, sub, id_apartado, id_prod))
+            con.commit()
+            return id_apartado
+        except Exception:
+            con.rollback(); raise
+        finally:
+            con.close()
+
+    def cambiar_estado_apartado(self, id_apartado, estado):
+        if estado not in ("Pendiente", "Entregado", "Cancelado"): return False
+        self._ejecutar_consulta("UPDATE APARTADOS SET estado=%s WHERE id_apartado=%s", (estado, id_apartado))
+        return True

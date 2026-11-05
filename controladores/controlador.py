@@ -18,6 +18,8 @@ class ControladorDulceria:
         self.usuario_actual = None
         self.rol_actual = None
         self.inicio_sesion = None
+        self.id_turno_actual = None
+        self._ultima_venta = None
 
         self.repo_ventas = RepositorioVentas()
         self.cola_tareas = queue.Queue()
@@ -40,10 +42,6 @@ class ControladorDulceria:
             self.rol_actual = self.modelo.obtener_rol(usuario)
             self.inicio_sesion = datetime.now()
             
-            
-            self.id_turno_actual = self.modelo.abrir_turno(usuario)
-            
-            
             self.vista.mostrar_alerta("Inicio de sesión", f"¡Bienvenido/a, {usuario}!", "info")
             self.vista.pantallas["PantallaLogin"].entry_usuario.delete(0, "end")
             self.vista.pantallas["PantallaLogin"].entry_pass.delete(0, "end")
@@ -56,26 +54,44 @@ class ControladorDulceria:
 
             self.vista.pantallas["MenuPrincipal"].configurar_acceso(usuario, self.rol_actual, opciones)
             self.vista.mostrar_pantalla("MenuPrincipal")
+
+            # Turno de caja en la BD: solo para cajeros y solo si el login fue correcto
+            self.id_turno_actual = self.modelo.abrir_turno(usuario) if self.rol_actual == "Cajero" else None
         else:
             self.vista.mostrar_alerta("Datos incorrectos", "Las claves de acceso o los datos ingresados no son correctos.\nPor favor, intente nuevamente.", "error")
             self.vista.pantallas["PantallaLogin"].entry_pass.delete(0, "end")
-            
-        
+
+
     def procesar_cobro_avanzado(self, tipo_pago, datos_factura):
         total = self.modelo.calcular_total()
         if total == 0:
             messagebox.showwarning("Aviso", "El ticket está vacío. Agrega productos primero.")
             return
 
+        if datos_factura and datos_factura.get("requiere"):
+            rfc = (datos_factura.get("rfc") or "").strip().upper()
+            if not (12 <= len(rfc) <= 13 and rfc.isalnum()):
+                messagebox.showwarning("RFC inválido", "El RFC debe tener 12 o 13 caracteres alfanuméricos.")
+                return
+            datos_factura["rfc"] = rfc
+
         pago = self._solicitar_pago(total, tipo_pago)
         if pago is None: 
             return
 
-        carrito_respaldo = self.modelo.ticket_actual.copy()
+        carrito_respaldo = [dict(i) for i in self.modelo.ticket_actual]
         exito, cambio = self.modelo.procesar_cobro(pago)
-        
+        if not exito:
+            messagebox.showwarning("Pago insuficiente", "El efectivo recibido es menor al total.")
+            return
+
         if exito:
+            # Guarda venta + detalles + descuento de stock + factura en UNA transacción
             aviso_historial = self._registrar_venta_historial(tipo_pago, total, carrito_respaldo, datos_factura)
+            if aviso_historial:          # falló: el ticket se conserva para reintentar
+                messagebox.showerror("Venta no guardada", aviso_historial.strip())
+                return
+            self.modelo.ticket_actual.clear()
 
             mensaje = f"¡Venta procesada con éxito!\n\nMétodo de pago: {tipo_pago}\n"
             if tipo_pago == "Efectivo":
@@ -95,17 +111,21 @@ class ControladorDulceria:
         return total
 
     def _registrar_venta_historial(self, tipo_pago, total, carrito, datos_factura):
+        """Guarda la venta en MySQL. Devuelve "" si todo salió bien o el mensaje de error."""
         try:
-            self.repo_ventas.registrar(
+            self._ultima_venta = self.repo_ventas.registrar(
                 metodo_pago=tipo_pago,
                 total=total,
                 articulos=carrito,
                 facturado=bool(datos_factura and datos_factura.get("requiere")),
-                 usuario_actual=self.usuario_actual
+                usuario_actual=self.usuario_actual,
+                id_turno=self.id_turno_actual,
+                datos_factura=datos_factura,
             )
             return ""
-        except Exception as e: 
-            return f"\n\nAviso: la venta no se pudo guardar ({str(e)})."
+        except Exception as e:
+            self._ultima_venta = None
+            return f"La venta no se pudo guardar: {e}"
 
     def _iniciar_hilo_factura(self, datos_factura, total, carrito, tipo_pago, pago, cambio):
         """Extrae la lógica de la ventana de guardado y la creación del Hilo."""
@@ -123,6 +143,9 @@ class ControladorDulceria:
         if not ruta_completa_pdf:
             messagebox.showwarning("Aviso", "Se canceló el guardado de la factura.")
             return "" # Retorna vacío para que no añada texto al mensaje
+
+        if self._ultima_venta:
+            self.repo_ventas.actualizar_ruta_factura(self._ultima_venta["id_venta"], ruta_completa_pdf)
 
         self.hilo_factura = HiloFactura(         
             ruta_completa=ruta_completa_pdf, 
@@ -249,20 +272,28 @@ class ControladorDulceria:
         return False, "Error al intentar actualizar el producto."
         
     def obtener_datos_ventas(self):
-        # Trae el inventario actualizado desde MySQL
-        inventario_bd = self.modelo.obtener_inventario_filtrado("", "Todas", "Todas")
-        return inventario_bd, self.modelo.ticket_actual, self.modelo.calcular_total()
+        return self.modelo.inventario, self.modelo.ticket_actual, self.modelo.calcular_total()
 
     def solicitar_proveedor(self, nombre_producto, stock_actual):
         mensaje = f"¿Deseas abastecer {nombre_producto}?\n\nStock actual: {stock_actual} unidades."
-        
         if messagebox.askyesno("Pedido a Proveedor", mensaje):
-            exito = self.modelo.registrar_pedido_proveedor(nombre_producto, 50, self.usuario_actual)
-            
-            if exito:
-                messagebox.showinfo("Éxito", f"Pedido enviado para {nombre_producto} y guardado en la BD.")
-            else:
-                messagebox.showerror("Error", "No se pudo guardar el pedido en la base de datos.")
+            ok, msg = self.registrar_pedido_manual(nombre_producto, 50)
+            (messagebox.showinfo if ok else messagebox.showerror)("Pedido a Proveedor", msg)
+
+    def iniciar_reposicion_automatica(self, callback):
+        """HILO 4: crea pedidos Pendientes para los productos bajos de stock (la vista ya lo invocaba)."""
+        usuario = self.usuario_actual
+        def tarea():
+            try: creados = self.modelo.crear_pedidos_reposicion(usuario)
+            except Exception: creados = 0
+            callback(creados)
+        threading.Thread(target=tarea, name="HiloReposicion", daemon=True).start()
+
+    def recibir_pedido(self, id_pedido):
+        return self.modelo.recibir_pedido_proveedor(id_pedido)
+
+    def registrar_apartado(self, nombre_cliente, fecha_entrega, anticipo, articulos):
+        return self.modelo.registrar_apartado(nombre_cliente, fecha_entrega, anticipo, articulos, self.usuario_actual)
 
     def procesar_filtro_inventario(self, texto, marca, categoria):
         return self.modelo.obtener_inventario_filtrado(texto, marca, categoria)
@@ -318,7 +349,7 @@ class ControladorDulceria:
         if resultado == "datos_invalidos": return False, "Precio > 0 y stock >= 0."
         return True, f"Producto '{nombre}' agregado."
 
-       # --- MÉTODOS EXCLUSIVOS DEL CAJERO ---
+    # --- MÉTODOS EXCLUSIVOS DEL CAJERO ---
     def obtener_resumen_cierre_caja(self):
         fin = datetime.now()
         inicio = self.inicio_sesion or fin
@@ -327,20 +358,8 @@ class ControladorDulceria:
         horas, resto = divmod(segundos, 3600)
         minutos, segundos = divmod(resto, 60)
 
-        # Calculamos cuánto efectivo debería haber en caja
-        ventas_turno = self.repo_ventas.obtener_todas()
-        efectivo_esperado = 0.0
-        
-        for v in ventas_turno:
-            try:
-                # Tomamos solo los primeros 19 caracteres: "YYYY-MM-DD HH:MM:SS"
-                fecha_texto = str(v["fecha"])[:19]
-                fecha_venta = datetime.strptime(fecha_texto, "%Y-%m-%d %H:%M:%S")
-                
-                if fecha_venta >= inicio and v["metodo_pago"] == "Efectivo":
-                    efectivo_esperado += float(v["total"])
-            except Exception:
-                continue # Si una fecha falla, la ignoramos y seguimos con la siguiente
+        # Efectivo que debería haber en caja = ventas en efectivo de ESTE turno (SQL)
+        efectivo_esperado = self.repo_ventas.efectivo_turno(self.id_turno_actual) if self.id_turno_actual else 0.0
 
         return {
             "usuario": self.usuario_actual or "",
