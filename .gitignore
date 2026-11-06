@@ -11,3 +11,8 @@ datos/
 
 # Reportes CSV exportados por la app
 reportes/
+
+# Ignorar variables de entorno
+.env
+
+.vscode/
