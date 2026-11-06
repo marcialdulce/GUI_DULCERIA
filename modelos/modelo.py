@@ -1,12 +1,16 @@
+import time
 from modelos.conexion import conectar_bd
 from seguridad import verificar_password
 
+SEGUNDOS_CACHE_INVENTARIO = 30   # otros equipos pueden cambiar el stock en la BD compartida
 UMBRAL_STOCK_BAJO = 15   # misma regla que usa la vista de inventario
 
 class ModeloDulceria:
     def __init__(self):
         self.conexion_bd = conectar_bd
         self.ticket_actual = [] 
+        self._cache_inventario = None
+        self._cache_inventario_hora = 0.0
         
     def _ejecutar_consulta(self, query, parametros=None, fetch=False, fetchall=False):
         """SELECT -> dict / lista de dicts.  INSERT/UPDATE/DELETE -> lastrowid (o True)."""
@@ -19,7 +23,8 @@ class ModeloDulceria:
             if fetch: return cursor.fetchone()
             if fetchall: return cursor.fetchall()
             conexion.commit()
-            return cursor.lastrowid or True      # <- antes devolvía None
+            self.invalidar_inventario()
+            return cursor.lastrowid or True
         except Exception:
             conexion.rollback()
             raise
@@ -123,6 +128,7 @@ class ModeloDulceria:
             cur.execute("UPDATE PRODUCTOS SET stock_actual = stock_actual + %s WHERE id_producto = %s", (ped["cantidad"], ped["id_producto"]))
             cur.execute("UPDATE PEDIDOS_PROVEEDOR SET estado='Recibido' WHERE id_pedido=%s", (id_pedido,))
             con.commit()
+            self.invalidar_inventario()
             return True
         except Exception:
             con.rollback(); raise
@@ -223,9 +229,21 @@ class ModeloDulceria:
         return resultados
     
 
+    def invalidar_inventario(self):
+        """Obliga a volver a leer el catálogo de la BD la próxima vez que se pida."""
+        self._cache_inventario = None
+
     @property
     def inventario(self):
-        """Catálogo activo para PanelVentas / PanelInicio (claves: nombre, marca, categoria, precio, stock)."""
+        """Catálogo activo (nombre, marca, categoria, precio, stock). Se guarda en memoria
+        para no consultar 1500 productos en cada clic; se renueva al escribir en la BD o cada 30 s."""
+        vencido = (time.monotonic() - self._cache_inventario_hora) > SEGUNDOS_CACHE_INVENTARIO
+        if self._cache_inventario is None or vencido:
+            self._cache_inventario = self._consultar_inventario()
+            self._cache_inventario_hora = time.monotonic()
+        return self._cache_inventario
+
+    def _consultar_inventario(self):
         filas = self._ejecutar_consulta("""
             SELECT p.nombre_dulce AS nombre, m.nombre_marca AS marca, c.nombre_categoria AS categoria,
                    p.precio_venta AS precio, p.stock_actual AS stock

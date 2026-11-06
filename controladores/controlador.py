@@ -122,6 +122,7 @@ class ControladorDulceria:
                 id_turno=self.id_turno_actual,
                 datos_factura=datos_factura,
             )
+            self.modelo.invalidar_inventario()   # la venta bajo el stock
             return ""
         except Exception as e:
             self._ultima_venta = None

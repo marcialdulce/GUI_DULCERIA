@@ -2,6 +2,9 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from vistas import estilos
 
+MAX_TARJETAS = 40        # tarjetas dibujadas a la vez (con 1500 productos, dibujarlas todas congela la ventana)
+MS_ESPERA_BUSQUEDA = 250  # espera tras la ultima tecla antes de filtrar
+
 DEBITO = "Débito"
 CREDITO = "Crédito"
 EVENTO_RUEDA = "<MouseWheel>"
@@ -30,6 +33,8 @@ class PanelVentas(tk.Frame):
         tk.Label(barra_busqueda, text="BUSCAR PRODUCTO", bg="#3A8D96", fg=estilos.BLANCO, font=("Arial", 10, "bold")).pack(side="left", padx=10)
         self.txt_buscar_venta = tk.Entry(barra_busqueda, width=20)
         self.txt_buscar_venta.pack(side="right", padx=10, pady=8)
+        self._id_busqueda = None
+        self.txt_buscar_venta.bind("<KeyRelease>", self._programar_busqueda)
 
         self.canvas_productos = tk.Canvas(panel_izq, bg="#EAEAEA", highlightthickness=0)
         self.scrollbar = ttk.Scrollbar(panel_izq, orient="vertical", command=self.canvas_productos.yview)
@@ -96,8 +101,6 @@ class PanelVentas(tk.Frame):
                 panel_der, text="CANCELAR TICKET", bg="#D9534F", fg="white",
                 font=("Arial", 9, "bold"), relief="flat", command=self.cancelar_ticket_actual
             ).pack(fill="x", padx=15, pady=(0, 15))
-
-        self.refrescar_pantalla()
 
         # --------------OPCIONES DE COBRO Y FACTURA-------------
         self.metodo_pago = tk.StringVar(value="Efectivo")
@@ -194,7 +197,8 @@ class PanelVentas(tk.Frame):
 
     def intentar_agregar(self, nombre_producto):
         self.controlador.procesar_agregar(nombre_producto)
-        self.refrescar_pantalla()
+        _, carrito, total = self.controlador.obtener_datos_ventas()
+        self.dibujar_ticket(carrito, total)
 
     def abrir_ventana_factura(self):
         modal_fac = tk.Toplevel(self)
@@ -316,11 +320,32 @@ class PanelVentas(tk.Frame):
         else:
             self.refrescar_pantalla()
 
+    def _programar_busqueda(self, event=None):
+        if self._id_busqueda is not None:
+            self.after_cancel(self._id_busqueda)
+        self._id_busqueda = self.after(MS_ESPERA_BUSQUEDA, self._aplicar_busqueda)
+
+    def _aplicar_busqueda(self):
+        self._id_busqueda = None
+        productos, _, _ = self.controlador.obtener_datos_ventas()
+        self.dibujar_catalogo(productos)
+        self.canvas_productos.yview_moveto(0)
+
     def dibujar_catalogo(self, productos_disponibles):
+        texto = self.txt_buscar_venta.get().strip().lower()
+        if texto:
+            productos_disponibles = [
+                p for p in productos_disponibles
+                if texto in p["nombre"].lower()
+                or texto in (p.get("marca") or "").lower()
+                or texto in (p.get("categoria") or "").lower()
+            ]
+        total_coincidencias = len(productos_disponibles)
+
         for widget in self.frame_lista.winfo_children():
             widget.destroy()
 
-        for producto in productos_disponibles:
+        for producto in productos_disponibles[:MAX_TARJETAS]:
             item = tk.Frame(self.frame_lista, bg=estilos.BLANCO, pady=8, padx=10, bd=1, relief="solid")
             item.pack(fill="x", pady=2, padx=2)
 
@@ -332,6 +357,13 @@ class PanelVentas(tk.Frame):
                                     command=lambda p=producto["nombre"]: self.intentar_agregar(p))
             btn_agregar.grid(row=0, column=2, rowspan=2, sticky="e", padx=5)
             item.grid_columnconfigure(2, weight=1)
+
+        if total_coincidencias > MAX_TARJETAS:
+            tk.Label(self.frame_lista, bg="#EAEAEA", fg="#555555", font=("Arial", 9, "italic"),
+                     text=f"Mostrando {MAX_TARJETAS} de {total_coincidencias}. Escribe en el buscador para encontrar otros.").pack(pady=8)
+        elif total_coincidencias == 0:
+            tk.Label(self.frame_lista, bg="#EAEAEA", fg="#555555", font=("Arial", 9, "italic"),
+                     text="Sin resultados.").pack(pady=8)
 
     def dibujar_ticket(self, carrito, total):
         for fila in self.tabla_ticket.get_children():
