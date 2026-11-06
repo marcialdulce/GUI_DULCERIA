@@ -10,7 +10,7 @@ class ModeloDulceria:
         
     def _ejecutar_consulta(self, query, parametros=None, fetch=False, fetchall=False):
         """SELECT -> dict / lista de dicts.  INSERT/UPDATE/DELETE -> lastrowid (o True)."""
-        conexion = self.conexion_bd.conectar()
+        conexion = conectar_bd()
         if not conexion: return None
         cursor = None
         try:
@@ -30,9 +30,17 @@ class ModeloDulceria:
 
     # ---------------- Usuarios y Roles ----------------
     def validar_usuario(self, username, password):
-        query = "SELECT `contraseña` AS clave FROM USUARIOS WHERE username = %s AND estatus = 'Activo'"
-        usuario = self._ejecutar_consulta(query, (username,), fetch=True)
-        return bool(usuario) and verificar_password(password, usuario["clave"])
+        username = username.strip()
+        password = password.strip()
+        
+        query = """
+            SELECT id_usuario, id_rol, nombre 
+            FROM usuarios 
+            WHERE username = %s AND contraseña = SHA2(%s, 256) AND estatus = 'Activo'
+        """
+        
+        resultado = self._ejecutar_consulta(query, (username, password), fetch=True)
+        return resultado
 
     def obtener_rol(self, username):
         query = """
@@ -105,7 +113,7 @@ class ModeloDulceria:
 
     def recibir_pedido_proveedor(self, id_pedido):
         """Marca el pedido como Recibido y SUMA la cantidad al stock (en una sola transacción)."""
-        con = self.conexion_bd.conectar()
+        con =  conectar_bd()
         if not con: return False
         try:
             cur = con.cursor(dictionary=True)
@@ -303,7 +311,7 @@ class ModeloDulceria:
         Guarda cabecera + detalles en una transacción. NO descuenta stock (se descuenta al entregar)."""
         id_usuario = self.obtener_id_usuario(username)
         if not id_usuario or not articulos: return None
-        con = self.conexion_bd.conectar()
+        con = conectar_bd()
         if not con: return None
         try:
             cur = con.cursor(dictionary=True)

@@ -1,14 +1,14 @@
 import uuid
 import threading
 from datetime import datetime
-from modelos.conexion import ConexionBD
+from modelos.conexion import conectar_bd
 
 FORMATO_FECHA = "%Y-%m-%d %H:%M:%S"
 
 
 class RepositorioVentas:
     def __init__(self):
-        self.conexion_bd = ConexionBD()
+        self.conexion_bd = conectar_bd
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------
@@ -16,7 +16,7 @@ class RepositorioVentas:
     # ------------------------------------------------------------------
     def registrar(self, metodo_pago, total, articulos, facturado=False, usuario_actual=None,
                   id_turno=None, datos_factura=None, descontar_stock=True):
-        conexion = self.conexion_bd.conectar()
+        conexion = conectar_bd()
         if not conexion:
             raise ConnectionError("No hay conexión con la base de datos.")
         cursor = None
@@ -74,7 +74,7 @@ class RepositorioVentas:
 
     def actualizar_ruta_factura(self, id_venta, ruta_pdf):
         """Guarda dónde quedó el PDF de la factura (el usuario lo elige DESPUÉS de cobrar)."""
-        conexion = self.conexion_bd.conectar()
+        conexion = conectar_bd()
         if not conexion: return
         try:
             cur = conexion.cursor()
@@ -88,7 +88,7 @@ class RepositorioVentas:
     # Carga masiva (script demo): una sola conexión, sin tocar el stock
     # ------------------------------------------------------------------
     def registrar_lote(self, ventas):
-        conexion = self.conexion_bd.conectar()
+        conexion = conectar_bd()
         if not conexion:
             raise ConnectionError("No hay conexión con la base de datos.")
         try:
@@ -118,7 +118,7 @@ class RepositorioVentas:
     # Lectura
     # ------------------------------------------------------------------
     def tamano_actual(self, usuario=None):
-        conexion = self.conexion_bd.conectar()
+        conexion = conectar_bd()
         if not conexion: return 0
         try:
             cur = conexion.cursor()
@@ -135,7 +135,7 @@ class RepositorioVentas:
 
     def iterar(self, limite_registros, usuario=None):
         """Un solo JOIN (antes: 1 consulta por venta). Devuelve (venta_dict, n_leidas)."""
-        conexion = self.conexion_bd.conectar()
+        conexion = conectar_bd()
         if not conexion: return
         try:
             cursor = conexion.cursor(dictionary=True, buffered=False)
@@ -184,7 +184,7 @@ class RepositorioVentas:
 
     def efectivo_turno(self, id_turno):
         """Efectivo que DEBE haber en caja por las ventas en efectivo de ese turno (cálculo en SQL)."""
-        conexion = self.conexion_bd.conectar()
+        conexion = conectar_bd()
         if not conexion: return 0.0
         try:
             cur = conexion.cursor()
