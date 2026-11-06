@@ -1,11 +1,11 @@
-from modelos.conexion import ConexionBD
+from modelos.conexion import conectar_bd
 from seguridad import verificar_password
 
 UMBRAL_STOCK_BAJO = 15   # misma regla que usa la vista de inventario
 
 class ModeloDulceria:
     def __init__(self):
-        self.conexion_bd = ConexionBD()
+        self.conexion_bd = conectar_bd
         self.ticket_actual = [] 
         
     def _ejecutar_consulta(self, query, parametros=None, fetch=False, fetchall=False):
