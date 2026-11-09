@@ -1,24 +1,38 @@
-"""Alta de usuarios con contraseña protegida.
-Uso:  python crear_usuario.py <username> <Administrador|Cajero> "<Nombre>" "<Ap. paterno>" [ap_materno]
-Pide la contraseña por teclado (no queda en el historial).
-"""
-import getpass
-import sys
-from modelos.conexion import ConexionBD
-from seguridad import hashear_password
+import bcrypt
+from modelos.conexion import conectar_bd
 
-if len(sys.argv) < 5:
-    sys.exit(__doc__)
-username, rol, nombre, ap_pat = sys.argv[1:5]
-ap_mat = sys.argv[5] if len(sys.argv) > 5 else None
-pwd = getpass.getpass("Contraseña: ")
-if len(pwd) < 6:
-    sys.exit("La contraseña debe tener al menos 6 caracteres.")
+def crear_usuario_admin():
+    print("--- CREAR NUEVO USUARIO ADMINISTRADOR ---")
+    username = input("Username: ")
+    password = input("Contraseña: ")
+    nombre = input("Nombre: ")
+    ap_paterno = input("Apellido Paterno: ")
+    ap_materno = input("Apellido Materno: ")
 
-con = ConexionBD().conectar()
-cur = con.cursor()
-cur.execute("""INSERT INTO USUARIOS (username, nombre, ap_paterno, ap_materno, `contraseña`, id_rol)
-               VALUES (%s,%s,%s,%s,%s,(SELECT id_rol FROM ROLES WHERE nombre_rol=%s))""",
-            (username, nombre, ap_pat, ap_mat, hashear_password(pwd), rol))
-con.commit()
-print("Usuario creado.")
+    # Encriptar la contraseña (truncada a 72 bytes máximo por requerimiento de bcrypt)
+    salt = bcrypt.gensalt()
+    password_hash = bcrypt.hashpw(password.encode('utf-8')[:72], salt).decode('utf-8')
+
+    # Conectar a la base de datos
+    conexion = conectar_bd()
+    if conexion:
+        try:
+            cursor = conexion.cursor()
+            # Insertamos con id_rol = 1 para que sea Administrador
+            query = """
+                INSERT INTO usuarios (username, password_hash, nombre, ap_paterno, ap_materno, estado, id_rol)
+                VALUES (%s, %s, %s, %s, %s, 'activo', 1)
+            """
+            cursor.execute(query, (username, password_hash, nombre, ap_paterno, ap_materno))
+            conexion.commit()
+            print(f"\n¡Éxito! El usuario '{username}' ha sido creado como Administrador.")
+            print("Ya puedes iniciar sesión en el sistema.")
+        except Exception as e:
+            print(f"\nError al crear el usuario en la BD: {e}")
+        finally:
+            if conexion.is_connected():
+                cursor.close()
+                conexion.close()
+
+if __name__ == "__main__":
+    crear_usuario_admin()

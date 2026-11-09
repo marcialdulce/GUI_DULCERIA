@@ -1,4 +1,5 @@
 import time
+import bcrypt
 from modelos.conexion import conectar_bd
 from seguridad import verificar_password
 
@@ -35,18 +36,34 @@ class ModeloDulceria:
 
     # ---------------- Usuarios y Roles ----------------
     def validar_usuario(self, username, password):
-        username = username.strip()
-        password = password.strip()
-        
         query = """
-            SELECT id_usuario, id_rol, nombre 
+            SELECT id_usuario, username, password_hash, nombre, ap_paterno, id_rol, estado 
             FROM usuarios 
-            WHERE username = %s AND contraseña = SHA2(%s, 256) AND estatus = 'Activo'
+            WHERE username = %s
         """
-        
-        resultado = self._ejecutar_consulta(query, (username, password), fetch=True)
-        return resultado
+        resultados = self._ejecutar_consulta(query, (username,), fetch=True)
 
+        if not resultados:
+            return False
+
+        usuario = resultados[0] if isinstance(resultados, list) else resultados
+        
+        # Extracción de datos
+        hash_almacenado = usuario['password_hash'] if isinstance(usuario, dict) else usuario[2]
+        estado = usuario['estado'] if isinstance(usuario, dict) else usuario[6]
+
+        if estado != 'activo':
+            return False
+            
+        try:
+            if bcrypt.checkpw(password.encode('utf-8'), hash_almacenado.encode('utf-8')):
+                return usuario
+            else:
+                return False
+        except ValueError as e:
+            print(f"Error interno de validación bcrypt: {e}")
+            return False
+        
     def obtener_rol(self, username):
         query = """
             SELECT r.nombre_rol FROM USUARIOS u 
