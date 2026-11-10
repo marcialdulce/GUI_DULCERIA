@@ -1,22 +1,16 @@
-# Archivo: generador_tickets.py
 import os
 import subprocess
 from datetime import datetime
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
+# =========================================================
+# 1. GENERAR FACTURA (Hoja tamaño carta)
+# =========================================================
 def generar_ticket_pdf(ruta_completa, rfc, razon_social, total, carrito_comprado, metodo_pago, pago, cambio):
-
-    
-    # Obtener fecha y hora actual automáticamente
     fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    
-    # Crear el documento PDF
     c = canvas.Canvas(ruta_completa, pagesize=letter)
 
-    # --- ELEMENTOS DE LA FACTURA ----
-    
     c.setFont("Helvetica-Bold", 14)
     c.drawString(40, 750, "DULCERÍA MVC S.A. DE C.V.")
     c.setFont("Helvetica", 10)
@@ -31,7 +25,6 @@ def generar_ticket_pdf(ruta_completa, rfc, razon_social, total, carrito_comprado
     c.drawString(320, 720, f"Receptor: {razon_social}")
     c.drawString(320, 705, f"RFC: {rfc}")
     
-    # Valores genéricos
     c.drawString(320, 690, "C.P.: 39355   |  Uso CFDI: G03 - Gastos en general")
     c.drawString(320, 675, "Régimen: 612 - Personas Físicas con")
     c.drawString(320, 660, "Actividades Empresariales")
@@ -49,7 +42,6 @@ def generar_ticket_pdf(ruta_completa, rfc, razon_social, total, carrito_comprado
     c.setFont("Helvetica", 9)
     y = 600
     
-    # Cálculos de IVA
     subtotal_venta = total / 1.16
     iva_venta = total - subtotal_venta
 
@@ -65,7 +57,6 @@ def generar_ticket_pdf(ruta_completa, rfc, razon_social, total, carrito_comprado
         c.drawString(480, y, f"${importe_sin_iva:.2f}") 
         y -= 20
 
-    # TOTALES Y MÉTODO DE PAGO
     c.line(40, y, 560, y)
     y -= 20
     
@@ -96,9 +87,64 @@ def generar_ticket_pdf(ruta_completa, rfc, razon_social, total, carrito_comprado
     c.save()
 
     try:
-        if os.name == 'nt':  # Windows
+        if os.name == 'nt':
             os.startfile(ruta_completa)
-        else:  # Linux / Mac
+        else:
             subprocess.Popen(['xdg-open', ruta_completa])
     except Exception as e:
         print(f"No se pudo abrir el PDF automáticamente: {e}")
+
+
+# =========================================================
+# 2. GENERAR TICKET (Hoja tamaño ticket para el Cajero)
+# =========================================================
+def generar_comprobante_ticket_pdf(ruta_completa, venta):
+    """Genera el comprobante PDF de una venta ya registrada."""
+    os.makedirs(os.path.dirname(ruta_completa) or ".", exist_ok=True)
+    c = canvas.Canvas(ruta_completa, pagesize=(300, 520))
+    ancho, alto = 300, 520
+    y = alto - 35
+    c.setFont("Helvetica-Bold", 14)
+    c.drawCentredString(ancho / 2, y, "DULCERÍA MVC")
+    y -= 18
+    c.setFont("Helvetica", 8)
+    c.drawCentredString(ancho / 2, y, "COMPROBANTE DE COMPRA")
+    y -= 22
+    c.drawString(18, y, f"Folio: {venta.get('folio', 'N/D')}")
+    y -= 13
+    c.drawString(18, y, f"Fecha: {venta.get('fecha', 'N/D')}")
+    y -= 13
+    c.drawString(18, y, f"Pago: {venta.get('metodo_pago', 'N/D')}")
+    y -= 12
+    c.line(18, y, ancho - 18, y)
+    y -= 16
+    c.setFont("Helvetica-Bold", 8)
+    c.drawString(18, y, "PRODUCTO")
+    c.drawRightString(ancho - 18, y, "IMPORTE")
+    y -= 12
+    c.setFont("Helvetica", 8)
+    
+    for articulo in venta.get("articulos", []):
+        nombre = str(articulo.get("producto", ""))[:27]
+        cantidad = int(articulo.get("cantidad", 0))
+        subtotal = float(articulo.get("subtotal", 0))
+        c.drawString(18, y, nombre)
+        c.drawRightString(ancho - 18, y, f"${subtotal:.2f}")
+        y -= 11
+        c.drawString(22, y, f"Cantidad: {cantidad}")
+        y -= 14
+        if y < 75:
+            c.showPage()
+            y = alto - 35
+            c.setFont("Helvetica", 8)
+            
+    c.line(18, y, ancho - 18, y)
+    y -= 22
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(18, y, "TOTAL:")
+    c.drawRightString(ancho - 18, y, f"${float(venta.get('total', 0)):.2f}")
+    y -= 28
+    c.setFont("Helvetica", 8)
+    c.drawCentredString(ancho / 2, y, "Gracias por su compra")
+    c.save()
+    return ruta_completa
