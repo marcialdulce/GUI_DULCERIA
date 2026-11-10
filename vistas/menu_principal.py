@@ -13,6 +13,9 @@ from vistas.panel_cierre_caja import PanelCierreCaja
 from vistas.header import LogoDulceriaHeader
 from vistas.panel_reportes import PanelReportes
 
+SECCION_COBROS = "COBROS Y PAGOS"
+
+
 class MenuPrincipal(tk.Frame):
     def __init__(self, parent, controlador):
         super().__init__(parent, bg=estilos.FONDO)
@@ -73,8 +76,8 @@ class MenuPrincipal(tk.Frame):
 
         paneles = {
             "INICIO": lambda: PanelInicio(self.contenido, self.controlador, self.mostrar_seccion),
-            "NUEVA VENTA": lambda: PanelVentas(self.contenido, self.controlador, ir_a_cobros=lambda: self.mostrar_seccion("COBROS Y PAGOS")),
-            "PUNTO DE VENTA": lambda: PanelVentas(self.contenido, self.controlador, modo_punto_venta=True, ir_a_cobros=lambda: self.mostrar_seccion("COBROS Y PAGOS")),
+            "NUEVA VENTA": lambda: PanelVentas(self.contenido, self.controlador, ir_a_cobros=lambda: self.mostrar_seccion(SECCION_COBROS)),
+            "PUNTO DE VENTA": lambda: PanelVentas(self.contenido, self.controlador, modo_punto_venta=True, ir_a_cobros=lambda: self.mostrar_seccion(SECCION_COBROS)),
             "COBROS Y PAGOS": lambda: PanelCobros(self.contenido, self.controlador),
             "INVENTARIO": lambda: PanelInventario(self.contenido, self.controlador),
             "APARTADOS": lambda: PanelApartados(self.contenido, self.controlador),

@@ -1,8 +1,11 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from vistas import estilos
+
+# Constante para evitar duplicación de strings (SonarQube)
+TEXTO_INICIAL_KPI = "$0.00"
 
 class PanelReportes(tk.Frame):
     def __init__(self, parent, controlador):
@@ -87,13 +90,14 @@ class PanelReportes(tk.Frame):
         frame_kpis = tk.Frame(self.tab_tabla, bg=estilos.FONDO)
         frame_kpis.pack(fill="x", pady=15, padx=20)
         
-        self.lbl_ingreso = tk.Label(frame_kpis, text="$0.00", font=("Arial", 20, "bold"), fg="#27AE60", bg="white", width=15, relief="solid", bd=1)
+        # Se usa la constante TEXTO_INICIAL_KPI en lugar de "$0.00"
+        self.lbl_ingreso = tk.Label(frame_kpis, text=TEXTO_INICIAL_KPI, font=("Arial", 20, "bold"), fg="#27AE60", bg="white", width=15, relief="solid", bd=1)
         self.lbl_ingreso.pack(side="left", padx=10, expand=True)
         
-        self.lbl_costo = tk.Label(frame_kpis, text="$0.00", font=("Arial", 20, "bold"), fg="#E74C3C", bg="white", width=15, relief="solid", bd=1)
+        self.lbl_costo = tk.Label(frame_kpis, text=TEXTO_INICIAL_KPI, font=("Arial", 20, "bold"), fg="#E74C3C", bg="white", width=15, relief="solid", bd=1)
         self.lbl_costo.pack(side="left", padx=10, expand=True)
         
-        self.lbl_utilidad = tk.Label(frame_kpis, text="$0.00", font=("Arial", 20, "bold"), fg="#2980B9", bg="white", width=15, relief="solid", bd=1)
+        self.lbl_utilidad = tk.Label(frame_kpis, text=TEXTO_INICIAL_KPI, font=("Arial", 20, "bold"), fg="#2980B9", bg="white", width=15, relief="solid", bd=1)
         self.lbl_utilidad.pack(side="left", padx=10, expand=True)
 
         # --- TABLA DE DESGLOSE POR PRODUCTO ---
@@ -131,8 +135,5 @@ class PanelReportes(tk.Frame):
                     f"${float(p['ganancia_neta']):,.2f}"
                 ))
         except Exception as e:
-            from tkinter import messagebox
+            # Se eliminó el import local que estaba aquí adentro
             messagebox.showerror("Error", f"Fallo al cargar datos: {e}")
-            
-        
-    

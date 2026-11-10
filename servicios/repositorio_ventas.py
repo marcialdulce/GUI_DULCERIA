@@ -17,7 +17,8 @@ class RepositorioVentas:
 
     def registrar(self, carrito, pagos, id_turno, datos_factura=None):
         conexion = conectar_bd()
-        if not conexion: raise Exception("No se pudo conectar a la base de datos.")
+        if not conexion: 
+            raise ConnectionError("No se pudo conectar a la base de datos.")
         cursor = None
         try:
             cursor = conexion.cursor()

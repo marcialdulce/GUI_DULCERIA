@@ -24,7 +24,7 @@ class RepositorioPedidos:
                 
             conexion.commit()
             return True
-        except Exception as e:
+        except Exception:  
             conexion.rollback()
             return False
         finally:

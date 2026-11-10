@@ -36,10 +36,21 @@ class PanelCobros(tk.Frame):
         self.lbl_total.config(text=f"${total:.2f}")
 
     def agregar_pago(self):
-        try: monto = float(self.e_monto.get())
-        except: return
+        try: 
+            monto = float(self.e_monto.get())
+        except ValueError:  # <-- CORREGIDO: Se especifica el tipo de error
+            return
+            
         metodo = self.cmb_metodo.get()
-        id_m = 1 if metodo == "Efectivo" else (2 if metodo == "Tarjeta de débito" else 3)
+        
+        # CORREGIDO: Se reemplazó el condicional anidado por un if/elif/else
+        if metodo == "Efectivo":
+            id_m = 1
+        elif metodo == "Tarjeta de débito":
+            id_m = 2
+        else:
+            id_m = 3
+            
         ref = self.e_ref.get() if metodo != "Efectivo" and self.e_ref.get() != "Ref. Tarjeta" else None
         
         self.pagos.append({"id_metodo_pago": id_m, "monto": monto, "referencia": ref})

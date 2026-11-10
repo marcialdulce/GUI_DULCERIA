@@ -80,6 +80,8 @@ class PanelApartados(tk.Frame):
             self.controlador.cancelar_apartado(sel[0][1])
             self.cargar_tabla()
 
+    # --- REFACTORIZACIÓN PARA REDUCIR COMPLEJIDAD ---
+
     def abrir_nuevo_apartado(self):
         modal = tk.Toplevel(self)
         modal.geometry("450x550")
@@ -87,50 +89,87 @@ class PanelApartados(tk.Frame):
         modal.grab_set()
         self.carrito.clear()
 
-        tk.Label(modal, text="Nombre:").pack(); e_nombre = tk.Entry(modal); e_nombre.pack()
-        tk.Label(modal, text="Teléfono:").pack(); e_tel = tk.Entry(modal); e_tel.pack()
-        tk.Label(modal, text="Fecha (AAAA-MM-DD):").pack(); e_fecha = tk.Entry(modal); e_fecha.insert(0, datetime.now().strftime("%Y-%m-%d")); e_fecha.pack()
+        tk.Label(modal, text="Nombre:").pack()
+        e_nombre = tk.Entry(modal)
+        e_nombre.pack()
+        
+        tk.Label(modal, text="Teléfono:").pack()
+        e_tel = tk.Entry(modal)
+        e_tel.pack()
+        
+        tk.Label(modal, text="Fecha (AAAA-MM-DD):").pack()
+        e_fecha = tk.Entry(modal)
+        e_fecha.insert(0, datetime.now().strftime("%Y-%m-%d"))
+        e_fecha.pack()
 
-        frame_add = tk.Frame(modal); frame_add.pack(pady=10)
+        frame_add = tk.Frame(modal)
+        frame_add.pack(pady=10)
+        
         cmb_prods = ttk.Combobox(frame_add, values=self.controlador.obtener_nombres_productos(), state="readonly", width=25)
         cmb_prods.pack(side="left", padx=5)
-        e_cant = tk.Entry(frame_add, width=5); e_cant.pack(side="left")
+        
+        e_cant = tk.Entry(frame_add, width=5)
+        e_cant.pack(side="left")
 
         tabla_c = ttk.Treeview(modal, columns=("PROD", "CANT"), show="headings", height=5)
-        tabla_c.heading("PROD", text="Producto"); tabla_c.heading("CANT", text="Cant")
-        tabla_c.column("PROD", width=250); tabla_c.column("CANT", width=50, anchor="center")
+        tabla_c.heading("PROD", text="Producto")
+        tabla_c.heading("CANT", text="Cant")
+        tabla_c.column("PROD", width=250)
+        tabla_c.column("CANT", width=50, anchor="center")
         tabla_c.pack(fill="x", padx=20, pady=10)
 
-        def agregar():
-            prod = next((p for p in self.controlador.modelo.inventario if p["nombre"] == cmb_prods.get()), None)
-            if prod and e_cant.get().isdigit():
-                cant = int(e_cant.get())
-                if cant > 0:
-                    self.carrito.append({"id_producto": prod["id_producto"], "nombre": prod["nombre"], "precio_unitario": prod["precio"], "cantidad": cant})
-                    tabla_c.insert("", "end", values=(prod["nombre"], cant))
-        
-        tk.Button(frame_add, text="+", command=agregar).pack(side="left")
+        # Se asigna la función auxiliar usando lambda
+        btn_agregar = tk.Button(frame_add, text="+")
+        btn_agregar.config(command=lambda: self._agregar_al_carrito(cmb_prods, e_cant, tabla_c))
+        btn_agregar.pack(side="left")
 
         tk.Label(modal, text="Método Pago Anticipo (50%):").pack()
         cmb_metodo = ttk.Combobox(modal, values=["Efectivo", "Tarjeta de débito", "Tarjeta de crédito"], state="readonly")
-        cmb_metodo.current(0); cmb_metodo.pack()
+        cmb_metodo.current(0)
+        cmb_metodo.pack()
 
-        def guardar():
-            if not e_nombre.get() or not self.carrito:
-                return messagebox.showwarning("Aviso", "Faltan datos o productos.", parent=modal)
-                
-            total = sum(a["precio_unitario"] * a["cantidad"] for a in self.carrito)
-            anticipo = round(total * 0.50, 2)
-            id_metodo = 1 if cmb_metodo.get() == "Efectivo" else (2 if cmb_metodo.get() == "Tarjeta de débito" else 3)
+        # Se asigna la función auxiliar usando lambda
+        btn_guardar = tk.Button(modal, text="REGISTRAR APARTADO", bg="#27AE60", fg="white")
+        btn_guardar.config(command=lambda: self._guardar_apartado(modal, e_nombre, e_tel, e_fecha, cmb_metodo))
+        btn_guardar.pack(pady=15)
+
+    def _agregar_al_carrito(self, cmb_prods, e_cant, tabla_c):
+        prod = next((p for p in self.controlador.modelo.inventario if p["nombre"] == cmb_prods.get()), None)
+        if prod and e_cant.get().isdigit():
+            cant = int(e_cant.get())
+            if cant > 0:
+                self.carrito.append({
+                    "id_producto": prod["id_producto"], 
+                    "nombre": prod["nombre"], 
+                    "precio_unitario": prod["precio"], 
+                    "cantidad": cant
+                })
+                tabla_c.insert("", "end", values=(prod["nombre"], cant))
+
+    def _guardar_apartado(self, modal, e_nombre, e_tel, e_fecha, cmb_metodo):
+        if not e_nombre.get() or not self.carrito:
+            return messagebox.showwarning("Aviso", "Faltan datos o productos.", parent=modal)
             
-            ok, msg = self.controlador.registrar_apartado(
-                e_nombre.get(), e_tel.get(), e_fecha.get(), self.carrito, 
-                [{"monto": anticipo, "id_metodo_pago": id_metodo}]
-            )
-            if ok:
-                messagebox.showinfo("Éxito", f"Guardado. Cobrar anticipo: ${anticipo:.2f}", parent=modal)
-                modal.destroy(); self.cargar_tabla()
-            else: 
-                messagebox.showerror("Error", msg, parent=modal)
+        total = sum(a["precio_unitario"] * a["cantidad"] for a in self.carrito)
+        anticipo = round(total * 0.50, 2)
 
-        tk.Button(modal, text="REGISTRAR APARTADO", bg="#27AE60", fg="white", command=guardar).pack(pady=15)
+        # CORRECCIÓN AQUÍ: Se reemplazó el condicional anidado por un if/elif/else
+        metodo_seleccionado = cmb_metodo.get()
+        if metodo_seleccionado == "Efectivo":
+            id_metodo = 1
+        elif metodo_seleccionado == "Tarjeta de débito":
+            id_metodo = 2
+        else:
+            id_metodo = 3
+
+        ok, msg = self.controlador.registrar_apartado(
+            e_nombre.get(), e_tel.get(), e_fecha.get(), self.carrito, 
+            [{"monto": anticipo, "id_metodo_pago": id_metodo}]
+        )
+        
+        if ok:
+            messagebox.showinfo("Éxito", f"Guardado. Cobrar anticipo: ${anticipo:.2f}", parent=modal)
+            modal.destroy()
+            self.cargar_tabla()
+        else: 
+            messagebox.showerror("Error", msg, parent=modal)

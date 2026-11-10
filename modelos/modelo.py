@@ -117,7 +117,7 @@ class ModeloDulceria:
         except Exception as e:
             return False, f"No se pudo eliminar: {e}"
 
-    def registrar_merma(self, id_producto, cantidad, motivo):
+    def registrar_merma(self, id_producto, cantidad):
         con = conectar_bd()
         try:
             cur = con.cursor(dictionary=True)

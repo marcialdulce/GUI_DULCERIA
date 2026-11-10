@@ -122,25 +122,16 @@ class PanelHistorial(tk.Frame):
     self._programar_sondeo()
 
   def _al_destruir(self, event=None):
-    if event is None or event.widget is self:
-      if self._after_id is not None:
-        try:
-          self.after_cancel(self._after_id)
-        except tk.TclError:
-          pass
-        self._after_id = None
+    # CORREGIDO: Se unieron los dos if en una sola condición
+    if (event is None or event.widget is self) and self._after_id is not None:
+      try:
+        self.after_cancel(self._after_id)
+      except tk.TclError:
+        pass
+      self._after_id = None
 
-  def _actualizar_vista(self):
-    c = self.controlador
-    estado = c.estado_carga["estado"]
-    cargando = estado in ("cargando", "cancelando")
-
-    self.btn_buscar.config(state="disabled" if cargando else "normal")
-    self.btn_cancelar.config(state="normal" if estado == "cargando" else "disabled")
-    self.btn_exportar.config(state="normal" if (c.resumen_ventas is not None and c.estado_export["estado"] != "guardando") else "disabled")
-
-    self.barra["value"] = c.estado_carga["porcentaje"]
-
+  # CORREGIDO: Se extrajo la lógica de los mensajes de estado a un método aparte
+  def _actualizar_mensaje_estado(self, estado, c):
     if estado == "cargando":
       self._estado(f"Leyendo ventas... {c.estado_carga['porcentaje']:.0f}% ({c.estado_carga['leidas']:,} registros)", "#555555")
     elif estado == "cancelando":
@@ -154,6 +145,20 @@ class PanelHistorial(tk.Frame):
 
     if c.estado_export["estado"] == "guardando":
       self._estado("Guardando reporte...", "#555555")
+
+  def _actualizar_vista(self):
+    c = self.controlador
+    estado = c.estado_carga["estado"]
+    cargando = estado in ("cargando", "cancelando")
+
+    self.btn_buscar.config(state="disabled" if cargando else "normal")
+    self.btn_cancelar.config(state="normal" if estado == "cargando" else "disabled")
+    self.btn_exportar.config(state="normal" if (c.resumen_ventas is not None and c.estado_export["estado"] != "guardando") else "disabled")
+
+    self.barra["value"] = c.estado_carga["porcentaje"]
+
+    # Llamada al nuevo método para reducir la complejidad cognitiva
+    self._actualizar_mensaje_estado(estado, c)
 
     if c.resumen_ventas is not None and c.resumen_ventas is not self._resumen_mostrado:
       self._resumen_mostrado = c.resumen_ventas

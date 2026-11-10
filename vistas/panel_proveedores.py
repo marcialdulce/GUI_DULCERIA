@@ -2,6 +2,12 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from vistas import estilos
 
+# Constantes para evitar duplicación (SonarQube)
+MSG_EXITO = "Éxito"
+MSG_ERROR = "Error"
+MSG_AVISO = "Aviso"
+MSG_ATENCION = "Atención"
+
 class PanelProveedores(tk.Frame):
     def __init__(self, parent, controlador):
         super().__init__(parent, bg=estilos.FONDO)
@@ -52,17 +58,17 @@ class PanelProveedores(tk.Frame):
     def eliminar_proveedor_seleccionado(self):
         sel = self.obtener_seleccionados()
         if not sel:
-            messagebox.showwarning("Aviso", "Marca la casilla del proveedor a eliminar.")
+            messagebox.showwarning(MSG_AVISO, "Marca la casilla del proveedor a eliminar.")
             return
 
         id_prov, nombre_prov = sel[0][1], sel[0][2]
 
         if messagebox.askyesno("Confirmar", f"¿Eliminar a '{nombre_prov}'?\n(No se puede si tiene pedidos registrados)"):
             if self.controlador.eliminar_proveedor(id_prov):
-                messagebox.showinfo("Éxito", "Proveedor eliminado.")
+                messagebox.showinfo(MSG_EXITO, "Proveedor eliminado.")
                 self.refrescar()
             else:
-                messagebox.showerror("Error", "No se pudo eliminar. Tiene pedidos vinculados.")
+                messagebox.showerror(MSG_ERROR, "No se pudo eliminar. Tiene pedidos vinculados.")
 
     def _cargar_prods(self, event):
         prov = next((p for p in self.controlador.obtener_proveedores() if p["nombre"] == self.cmb_prov.get()), None)
@@ -74,9 +80,12 @@ class PanelProveedores(tk.Frame):
         try:
             prod_nombre = self.cmb_prods.get()
             texto_cant = self.e_cant.get().strip()
-            if not texto_cant: return messagebox.showwarning("Atención", "Ingresa una cantidad.")
+            if not texto_cant: 
+                return messagebox.showwarning(MSG_ATENCION, "Ingresa una cantidad.")
+            
             cant = int(texto_cant)
-            if cant <= 0: return messagebox.showwarning("Atención", "La cantidad debe ser mayor a cero.")
+            if cant <= 0: 
+                return messagebox.showwarning(MSG_ATENCION, "La cantidad debe ser mayor a cero.")
             
             for p in self.productos_prov:
                 if p["nombre"] == prod_nombre:
@@ -86,16 +95,16 @@ class PanelProveedores(tk.Frame):
                     self.e_cant.delete(0, 'end')
                     break
         except ValueError:
-            messagebox.showerror("Error", "La cantidad debe ser un número entero.")
+            messagebox.showerror(MSG_ERROR, "La cantidad debe ser un número entero.")
 
     def _guardar_pedido(self):
         prov = next((p for p in self.controlador.obtener_proveedores() if p["nombre"] == self.cmb_prov.get()), None)
         if prov and self.carrito_pedido:
             if self.controlador.crear_pedido_manual(prov["id"], self.carrito_pedido):
-                messagebox.showinfo("Éxito", "Pedido enviado al proveedor.")
+                messagebox.showinfo(MSG_EXITO, "Pedido enviado al proveedor.")
                 if self.modal: self.modal.destroy()
             else: 
-                messagebox.showerror("Error", "No se pudo guardar.")
+                messagebox.showerror(MSG_ERROR, "No se pudo guardar.")
 
     def nuevo_pedido(self):
         self.modal = tk.Toplevel(self)
@@ -121,13 +130,23 @@ class PanelProveedores(tk.Frame):
         self.tabla_modal = ttk.Treeview(self.modal, columns=("PROD", "CANT", "COSTO"), show="headings", height=8)
         for c in ("PROD", "CANT", "COSTO"): 
             self.tabla_modal.heading(c, text=c)
-        self.tabla_modal.column("PROD", width=250); self.tabla_modal.column("CANT", width=50); self.tabla_modal.column("COSTO", width=80)
+        self.tabla_modal.column("PROD", width=250)
+        self.tabla_modal.column("CANT", width=50)
+        self.tabla_modal.column("COSTO", width=80)
         self.tabla_modal.pack(fill="x", padx=20, pady=10)
 
         self.cmb_prov.bind("<<ComboboxSelected>>", self._cargar_prods)
 
         tk.Button(self.modal, text="+ AGREGAR AL PEDIDO", bg="#F1C40F", command=self._agregar_al_carrito).pack(pady=5)
         tk.Button(self.modal, text="GUARDAR PEDIDO", bg="#27AE60", fg="white", command=self._guardar_pedido).pack(pady=15)
+
+    def _recibir_mercancia(self, tabla, modal):
+        sel = tabla.selection()
+        if sel:
+            id_p = tabla.item(sel[0])["values"][0]
+            if self.controlador.recibir_pedido(id_p):
+                messagebox.showinfo(MSG_EXITO, "Mercancía recibida y stock actualizado.")
+                modal.destroy()
 
     def ver_pedidos(self):
         modal = tk.Toplevel(self)
@@ -137,18 +156,15 @@ class PanelProveedores(tk.Frame):
         tabla = ttk.Treeview(modal, columns=("ID", "PROD", "CANT", "TOTAL"), show="headings")
         for c in ("ID", "PROD", "CANT", "TOTAL"): 
             tabla.heading(c, text=c)
-        tabla.column("ID", width=80); tabla.column("PROD", width=300); tabla.column("CANT", width=80); tabla.column("TOTAL", width=100)
+        tabla.column("ID", width=80)
+        tabla.column("PROD", width=300)
+        tabla.column("CANT", width=80)
+        tabla.column("TOTAL", width=100)
         tabla.pack(fill="both", expand=True, padx=10, pady=10)
 
         for p in self.controlador.obtener_pedidos_activos():
             tabla.insert("", "end", values=(p["id_pedido"], p["producto"], p["cantidad"], f"${float(p['subtotal']):.2f}"))
 
-        def recibir():
-            sel = tabla.selection()
-            if sel:
-                id_p = tabla.item(sel[0])["values"][0]
-                if self.controlador.recibir_pedido(id_p):
-                    messagebox.showinfo("Éxito", "Mercancía recibida y stock actualizado.")
-                    modal.destroy()
-
-        tk.Button(modal, text="RECIBIR MERCANCÍA", bg="#27AE60", fg="white", command=recibir).pack(pady=10)
+        # Se extrajo la función anidada a un método propio
+        tk.Button(modal, text="RECIBIR MERCANCÍA", bg="#27AE60", fg="white", 
+                  command=lambda: self._recibir_mercancia(tabla, modal)).pack(pady=10)
