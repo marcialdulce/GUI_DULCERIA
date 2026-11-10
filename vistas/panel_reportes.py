@@ -50,7 +50,7 @@ class PanelReportes(tk.Frame):
             self.tabla.delete(row)
 
         for p in datos["detalle"]:
-            ganancia = float(p["ganancia_bruta"])
+            ganancia = float(p["ganancia_neta"])
             color_tag = "positivo" if ganancia >= 0 else "negativo"
             self.tabla.insert("", "end", values=(
                 p["nombre_dulce"], p["unidades_vendidas"], 

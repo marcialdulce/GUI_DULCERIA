@@ -16,10 +16,14 @@ class ModeloDulceria:
         if not conexion: return None
         cursor = None
         try:
-            cursor = conexion.cursor(dictionary=True)
+            # Agregamos buffered=True para evitar el error "Unread result found"
+            cursor = conexion.cursor(dictionary=True, buffered=True)
             cursor.execute(query, parametros or ())
+            
+            # Respetamos tu lógica original de fetch vs fetchall
             if fetch: return cursor.fetchone()
             if fetchall: return cursor.fetchall()
+            
             conexion.commit()
             self.invalidar_inventario()
             return cursor.lastrowid or True
@@ -29,6 +33,22 @@ class ModeloDulceria:
         finally:
             if cursor: cursor.close()
             if conexion.is_connected(): conexion.close()
+
+    def obtener_reporte_ganancias(self):
+        """Obtiene el reporte financiero desde la nueva vista analítica mensual."""
+        query = """
+            SELECT 
+                mes,
+                anio,
+                ingresos_totales,
+                costo_inversion,
+                ahorro_promociones,
+                ganancia_neta_real
+            FROM vw_analisis_financiero_mensual
+            ORDER BY anio DESC, mes DESC
+        """
+        # CLAVE: Usamos fetchall=True para que cargue todos los meses de la tabla
+        return self._ejecutar_consulta(query, fetchall=True)
 
     # ---------------- Usuarios ----------------
     def validar_usuario(self, username, password):
@@ -88,9 +108,9 @@ class ModeloDulceria:
                 
             nuevo_stock = stock_actual - cantidad
             cur.execute("""
-                INSERT INTO movimientos_inventario (tipo, cantidad, stock_resultante, id_producto)
-                VALUES ('ajuste', %s, %s, %s)
-            """, (-cantidad, nuevo_stock, id_producto))
+                INSERT INTO movimientos_inventario (tipo, cantidad, stock_resultante, observaciones, id_producto)
+                VALUES ('ajuste', %s, %s, %s, %s)
+            """, (-cantidad, nuevo_stock, f"Merma: {motivo}", id_producto))
             con.commit()
             self.invalidar_inventario()
             return True, "Merma registrada correctamente."
@@ -98,7 +118,8 @@ class ModeloDulceria:
             con.rollback()
             return False, str(e)
         finally:
-            con.close()
+            if con.is_connected():
+                con.close()
 
     def agregar_al_ticket(self, nombre_producto, cantidad):
         prod = next((p for p in self.inventario if p["nombre"] == nombre_producto), None)
@@ -128,31 +149,54 @@ class ModeloDulceria:
 
     # ---------------- Reportes y Ganancias ----------------
     def obtener_reporte_ganancias(self):
-        try:
-            query = "SELECT * FROM vista_ganancias_productos ORDER BY ganancia_bruta DESC"
-            filas = self._ejecutar_consulta(query, fetchall=True) or []
-            
-            ingreso_total = sum(float(f["ingresos_totales"]) for f in filas)
-            costo_total = sum(float(f["unidades_vendidas"]) * float(f["costo_unitario"]) for f in filas)
-            utilidad = ingreso_total - costo_total
-            
-            return {
-                "detalle": filas,
-                "ingreso_total": ingreso_total,
-                "costo_total": costo_total,
-                "utilidad_bruta": utilidad
-            }
-        except Exception as e:
-            # Si hay un error (como que falte la vista), mostramos la alerta en consola
-            # y devolvemos ceros para que la interfaz no se caiga.
-            print(f"Error al cargar reportes: {e}")
-            return {
-                "detalle": [],
-                "ingreso_total": 0.0,
-                "costo_total": 0.0,
-                "utilidad_bruta": 0.0
-            }
+        """Obtiene el reporte financiero fusionando la vista analítica con el desglose de productos."""
+        
+        # 1. Obtenemos los totales globales usando la nueva vista para gerencia
+        totales_query = """
+            SELECT 
+                SUM(ingresos_totales) AS ingreso_total,
+                SUM(costo_inversion) AS costo_total,
+                SUM(ganancia_neta_real) AS utilidad_bruta
+            FROM vw_analisis_financiero_mensual
+        """
+        totales = self._ejecutar_consulta(totales_query, fetch=True)
+        
+        # Si la tabla está vacía, evitamos errores devolviendo 0
+        if not totales or totales['ingreso_total'] is None:
+            totales = {'ingreso_total': 0, 'costo_total': 0, 'utilidad_bruta': 0}
 
+        # 2. Obtenemos el desglose de productos para llenar la tabla inferior
+        productos_query = """
+            SELECT 
+                p.nombre_dulce, 
+                m.nombre_marca, 
+                c.nombre_categoria,
+                SUM(dv.cantidad) AS unidades_vendidas, 
+                SUM(dv.subtotal) AS ingreso_total_ventas,
+                COALESCE((SELECT costo_unitario FROM detalles_pedidos_proveedores dpp 
+                          WHERE dpp.id_producto = p.id_producto 
+                          ORDER BY id_detalle_pedido_proveedor DESC LIMIT 1), 0) AS costo_promedio
+            FROM productos p
+            JOIN detalles_ventas dv ON p.id_producto = dv.id_producto
+            JOIN marcas m ON p.id_marca = m.id_marca
+            JOIN categorias c ON p.id_categoria = c.id_categoria
+            GROUP BY p.id_producto, p.nombre_dulce, m.nombre_marca, c.nombre_categoria
+            ORDER BY ingreso_total_ventas DESC
+        """
+        lista = self._ejecutar_consulta(productos_query, fetchall=True) or []
+        
+        # 3. Calculamos matemáticamente la ganancia neta individual de cada dulce
+        for prod in lista:
+            prod['ganancia_neta'] = prod['ingreso_total_ventas'] - (prod['unidades_vendidas'] * prod['costo_promedio'])
+
+        # 4. Construimos y devolvemos el diccionario con las llaves exactas que exige Tkinter
+        return {
+            'ingreso_total': float(totales.get('ingreso_total') or 0),
+            'costo_total': float(totales.get('costo_total') or 0),
+            'utilidad_bruta': float(totales.get('utilidad_bruta') or 0),
+            'detalle': lista
+        }
+    
     # ---------------- Proveedores / Pedidos ----------------
     def obtener_proveedores(self):
         query = "SELECT id_proveedor as id, empresa as nombre, telefono, correo FROM proveedores"
@@ -217,3 +261,15 @@ class ModeloDulceria:
             ORDER BY a.fecha_entrega
         """
         return self._ejecutar_consulta(query, fetchall=True) or []
+    
+    
+    def eliminar_proveedor(self, id_proveedor):
+        """Elimina un proveedor de la base de datos."""
+        query = "DELETE FROM proveedores WHERE id_proveedor = %s"
+        try:
+            self._ejecutar_consulta(query, (id_proveedor,))
+            return True
+        except Exception as e:
+            # Capturar error si el proveedor tiene pedidos vinculados (integridad referencial)
+            print(f"Error al eliminar proveedor: {e}")
+            return False

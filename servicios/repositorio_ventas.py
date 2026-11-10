@@ -75,3 +75,19 @@ class RepositorioVentas:
             return efectivo_ventas + efectivo_apartados
         finally:
             conexion.close()
+            
+    def obtener_todas(self):
+        """Consulta todas las ventas registradas con su estado de facturación."""
+        query = """
+            SELECT 
+                v.id_venta,
+                v.folio,
+                v.fecha_hora,
+                v.subtotal,
+                (v.subtotal + v.impuesto) AS total,
+                CASE WHEN f.id_factura IS NOT NULL THEN 'Facturada' ELSE 'Sin Factura' END AS estado_factura
+            FROM ventas v
+            LEFT JOIN facturas f ON v.id_venta = f.id_venta
+            ORDER BY v.fecha_hora DESC
+        """
+        return self._ejecutar_consulta(query, fetch=True)
