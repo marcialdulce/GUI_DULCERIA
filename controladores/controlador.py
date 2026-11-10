@@ -3,6 +3,7 @@ import queue
 import threading
 from tkinter import messagebox, simpledialog
 from datetime import datetime
+from reportlab.pdfgen import canvas
 from modelos.modelo import ModeloDulceria
 from servicios.repositorio_ventas import RepositorioVentas
 from servicios.repositorio_apartados import RepositorioApartados
@@ -81,36 +82,69 @@ class ControladorDulceria:
             self.estado_carga["estado"] = "cancelando"
             self._cancelar_carga.set()
 
-    def exportar_reporte(self, carpeta):
-        if self.resumen_ventas is None: return False, "Primero carga las ventas."
-        if self.estado_export["estado"] == "guardando": return False, "Ya se está guardando."
-        carpeta = (carpeta or "").strip() or "reportes"
-        tarea = TareaExportarReporte(self.resumen_ventas, carpeta, self.cola_tareas)
-        self.hilo_export = threading.Thread(target=tarea.run, name="HiloExportarReporte", daemon=True)
-        self.estado_export = {"estado": "guardando", "ruta": ""}
-        self.hilo_export.start()
-        return True, ""
+  def exportar_reporte(self, carpeta):
+    if self.resumen_ventas is None:
+      return (
+          False,
+          "Primero carga las ventas (botón BUSCAR) para tener datos que"
+          " exportar.",
+      )
+    if self.estado_export["estado"] == "guardando":
+      return False, "Ya se está guardando un reporte. Espera a que termine."
 
-    def hay_tareas_activas(self):
-        return self.estado_carga["estado"] in ("cargando", "cancelando") or self.estado_export["estado"] == "guardando"
+    carpeta = (carpeta or "").strip() or "reportes"
+    tarea = TareaExportarReporte(self.resumen_ventas, carpeta, self.cola_tareas)
+    self.hilo_export = threading.Thread(
+        target=tarea.run, name="HiloExportarReporte", daemon=True
+    )
+    self.estado_export = {"estado": "guardando", "ruta": ""}
+    self.hilo_export.start()
+    return True, ""
 
-    def sondear_tareas(self):
-        while True:
-            try: msg = self.cola_tareas.get_nowait()
-            except queue.Empty: return
-            self._aplicar_mensaje(msg)
+  def hay_tareas_activas(self):
+    return self.estado_carga["estado"] in (
+        "cargando",
+        "cancelando",
+    ) or self.estado_export["estado"] == "guardando"
 
-    def _aplicar_mensaje(self, msg):
-        tipo = msg["tipo"]
-        if msg["tarea"] == "carga":
-            e = self.estado_carga
-            if tipo == "progreso": e["porcentaje"], e["leidas"] = msg["porcentaje"], msg["leidas"]
-            elif tipo == "terminado": self.resumen_ventas = msg["resumen"]; e.update(estado="terminado", porcentaje=100.0, leidas=msg["leidas"])
-            elif tipo == "cancelado": e["estado"] = "cancelado"
-            elif tipo == "error": e.update(estado="error", mensaje=msg["mensaje"]); self._notificaciones.append(("error", "Error al cargar", msg["mensaje"]))
-        else:
-            if tipo == "terminado": self.estado_export = {"estado": "terminado", "ruta": msg["ruta"]}; self._notificaciones.append(("info", "Reporte generado", f"Guardado en:\n{os.path.abspath(msg['ruta'])}"))
-            elif tipo == "error": self.estado_export = {"estado": "error", "ruta": ""}; self._notificaciones.append(("error", "Error al guardar", msg["mensaje"]))
+  def sondear_tareas(self):
+    while True:
+      try:
+        msg = self.cola_tareas.get_nowait()
+      except queue.Empty:
+        return
+      self._aplicar_mensaje(msg)
+
+  def _aplicar_mensaje(self, msg):
+    tipo = msg["tipo"]
+    if msg["tarea"] == "carga":
+      e = self.estado_carga
+      if tipo == "progreso":
+        e["porcentaje"], e["leidas"] = msg["porcentaje"], msg["leidas"]
+      elif tipo == "terminado":
+        self.resumen_ventas = msg["resumen"]
+        e.update(estado="terminado", porcentaje=100.0, leidas=msg["leidas"])
+      elif tipo == "cancelado":
+        e["estado"] = "cancelado"
+      elif tipo == "error":
+        e.update(estado="error", mensaje=msg["mensaje"])
+        self._notificaciones.append(
+            ("error", "Error al cargar ventas", msg["mensaje"])
+        )
+    else:
+      if tipo == "terminado":
+        self.estado_export = {"estado": "terminado", "ruta": msg["ruta"]}
+        self._notificaciones.append((
+            "info",
+            "Reporte generado",
+            "El reporte se guardó"
+            f" en:\n{os.path.abspath(msg['ruta'])}",
+        ))
+      elif tipo == "error":
+        self.estado_export = {"estado": "error", "ruta": ""}
+        self._notificaciones.append(
+            ("error", "No se pudo guardar el reporte", msg["mensaje"])
+        )
 
     def tomar_notificaciones(self):
         pendientes, self._notificaciones = self._notificaciones, []
@@ -208,3 +242,5 @@ class ControladorDulceria:
         self.usuario_actual = None
         self.vista.pantallas["MenuPrincipal"].configurar_acceso("", None, [])
         self.vista.mostrar_pantalla("PantallaLogin")
+        self.vista.pantallas["PantallaLogin"].entry_usuario.delete(0, "end")
+        self.vista.pantallas["PantallaLogin"].entry_pass.delete(0, "end")
