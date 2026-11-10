@@ -74,48 +74,85 @@ class ModeloDulceria:
             f["stock"] = int(f["stock_actual"])
         return filas
 
-    def obtener_categorias(self):
-        return self._ejecutar_consulta("SELECT id_categoria AS id, nombre_categoria AS nombre FROM categorias ORDER BY nombre_categoria", fetchall=True) or []
-
-    def obtener_marcas(self):
-        return self._ejecutar_consulta("SELECT id_marca AS id, nombre_marca AS nombre FROM marcas ORDER BY nombre_marca", fetchall=True) or []
-
-    def obtener_unidades(self):
-        return self._ejecutar_consulta("SELECT id_unidad AS id, nombre_unidad AS nombre FROM unidades ORDER BY nombre_unidad", fetchall=True) or []
-
+    #---------------- CRUD de Productos ----------------
     def crear_producto(self, datos):
+        query = """
+            INSERT INTO productos 
+            (codigo_barras, nombre_dulce, precio_venta, stock_minimo, estado, 
+             id_marca, id_categoria, id_unidad, id_proveedor) 
+            VALUES (%s, %s, %s, %s, 'activo', %s, %s, %s, %s)
+        """
         try:
-            self._ejecutar_consulta("""
-                INSERT INTO productos (codigo_barras, nombre_dulce, precio_venta, stock_minimo,
-                                       estado, id_marca, id_categoria, id_unidad, id_proveedor)
-                VALUES (%s, %s, %s, %s, 'activo', %s, %s, %s, %s)
-            """, (datos["codigo_barras"], datos["nombre_dulce"], datos["precio_venta"],
-                  datos.get("stock_minimo", 5), datos["id_marca"], datos["id_categoria"],
-                  datos["id_unidad"], datos.get("id_proveedor")))
-            return True, "Producto creado correctamente."
+            self._ejecutar_consulta(query, (
+                datos.get("codigo_barras"), datos["nombre_dulce"], datos["precio_venta"], 
+                datos.get("stock_minimo", 5), datos.get("id_marca"), datos.get("id_categoria"), 
+                datos.get("id_unidad"), datos.get("id_proveedor")
+            ))
+            return True, "Producto creado exitosamente."
         except Exception as e:
-            return False, f"No se pudo crear: {e}"
+            return False, f"Error al crear el producto: {str(e)}"
 
     def actualizar_producto(self, id_producto, datos):
+        query = """
+            UPDATE productos 
+            SET codigo_barras=%s, nombre_dulce=%s, precio_venta=%s, stock_minimo=%s, 
+                id_marca=%s, id_categoria=%s, id_unidad=%s, id_proveedor=%s
+            WHERE id_producto=%s
+        """
         try:
-            self._ejecutar_consulta("""
-                UPDATE productos SET codigo_barras=%s, nombre_dulce=%s, precio_venta=%s,
-                                     stock_minimo=%s, id_marca=%s, id_categoria=%s,
-                                     id_unidad=%s, id_proveedor=%s
-                WHERE id_producto=%s
-            """, (datos["codigo_barras"], datos["nombre_dulce"], datos["precio_venta"],
-                  datos["stock_minimo"], datos["id_marca"], datos["id_categoria"],
-                  datos["id_unidad"], datos.get("id_proveedor"), id_producto))
-            return True, "Producto actualizado."
+            self._ejecutar_consulta(query, (
+                datos.get("codigo_barras"), datos["nombre_dulce"], datos["precio_venta"], 
+                datos.get("stock_minimo", 5), datos.get("id_marca"), datos.get("id_categoria"), 
+                datos.get("id_unidad"), datos.get("id_proveedor"), id_producto
+            ))
+            return True, "Producto actualizado exitosamente."
         except Exception as e:
-            return False, f"No se pudo actualizar: {e}"
+            return False, f"Error al actualizar el producto: {str(e)}"
 
+    # ---------------- Catálogos (Para los Combobox) ----------------
+    def obtener_marcas(self):
+        query = "SELECT id_marca AS id, nombre_marca AS nombre FROM marcas ORDER BY nombre_marca"
+        return self._ejecutar_consulta(query, fetchall=True) or []
+
+    def obtener_categorias(self):
+        query = "SELECT id_categoria AS id, nombre_categoria AS nombre FROM categorias ORDER BY nombre_categoria"
+        return self._ejecutar_consulta(query, fetchall=True) or []
+
+    def obtener_unidades(self):
+        query = "SELECT id_unidad AS id, nombre_unidad AS nombre FROM unidades ORDER BY nombre_unidad"
+        return self._ejecutar_consulta(query, fetchall=True) or []
+    
     def eliminar_producto(self, id_producto):
+        con = conectar_bd()
         try:
-            self._ejecutar_consulta("UPDATE productos SET estado='inactivo' WHERE id_producto=%s", (id_producto,))
-            return True, "Producto dado de baja (inactivo)."
+            cur = con.cursor(dictionary=True)
+            
+            # 1. Obtener el stock actual del producto antes de eliminarlo
+            cur.execute("SELECT stock_resultante FROM movimientos_inventario WHERE id_producto=%s ORDER BY id_movimiento_inventario DESC LIMIT 1", (id_producto,))
+            res = cur.fetchone()
+            stock_actual = res["stock_resultante"] if res else 0
+            
+            # 2. Si hay stock, registrar un ajuste para vaciarlo a cero
+            if stock_actual > 0:
+                cur.execute("""
+                    INSERT INTO movimientos_inventario (tipo, cantidad, stock_resultante, observaciones, id_producto)
+                    VALUES ('ajuste', %s, 0, 'Eliminación del producto del sistema', %s)
+                """, (-stock_actual, id_producto))
+                
+            # 3. Cambiar el estado a 'inactivo'
+            cur.execute("UPDATE productos SET estado='inactivo' WHERE id_producto=%s", (id_producto,))
+            
+            con.commit()
+            self.invalidar_inventario()
+            # AQUÍ ESTÁ LA CLAVE: Devolvemos True Y el mensaje que espera la interF z
+            return True, "Producto eliminado y stock ajustado a 0 correctamente."
         except Exception as e:
-            return False, f"No se pudo eliminar: {e}"
+            con.rollback()
+            # Devolvemos False Y el mensaje de error
+            return False, f"Error al eliminar producto: {str(e)}"
+        finally:
+            if con.is_connected():
+                con.close()
 
     def registrar_merma(self, id_producto, cantidad):
         con = conectar_bd()

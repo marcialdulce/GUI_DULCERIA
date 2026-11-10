@@ -270,26 +270,35 @@ class ControladorDulceria:
         self.vista.pantallas["PantallaLogin"].entry_usuario.delete(0, "end")
         self.vista.pantallas["PantallaLogin"].entry_pass.delete(0, "end")
         
-        # --- Catálogos para formulario de productos ---
-    def obtener_categorias(self):
-        return self.modelo.obtener_categorias()
-
+      
+    # ---------------- Catálogos para Combobox ----------------
     def obtener_marcas(self):
         return self.modelo.obtener_marcas()
+
+    def obtener_categorias(self):
+        return self.modelo.obtener_categorias()
 
     def obtener_unidades(self):
         return self.modelo.obtener_unidades()
 
-    # --- CRUD de productos (solo administrador) ---
+    # ---------------- CRUD de Productos ----------------
     def crear_producto(self, datos):
-        if self.rol_actual != "Administrador":
-            return False, "Solo un administrador puede crear productos."
+        # Validación extra de negocio si se requiere (ej. precio > 0)
+        if datos.get("precio_venta", 0) <= 0:
+            return False, "El precio de venta debe ser mayor a 0."
+        if not datos.get("nombre_dulce"):
+            return False, "El nombre del producto no puede estar vacío."
+            
         return self.modelo.crear_producto(datos)
 
     def actualizar_producto(self, id_producto, datos):
-        if self.rol_actual != "Administrador":
-            return False, "Solo un administrador puede editar productos."
+        if datos.get("precio_venta", 0) <= 0:
+            return False, "El precio de venta debe ser mayor a 0."
+        if not datos.get("nombre_dulce"):
+            return False, "El nombre del producto no puede estar vacío."
+            
         return self.modelo.actualizar_producto(id_producto, datos)
+    
 
     def eliminar_producto(self, id_producto):
         if self.rol_actual != "Administrador":

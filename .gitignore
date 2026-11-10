@@ -2,10 +2,6 @@ __pycache__/
 
 .scannerwork/
 
-# Ignorar facturas generadas por el sistema
-facturas/
-*.pdf
-
 # Datos generados por la app
 datos/
 
@@ -16,3 +12,5 @@ reportes/
 .env
 
 .vscode/
+
+tickets/*.pdf
