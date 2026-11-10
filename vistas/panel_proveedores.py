@@ -12,52 +12,58 @@ class PanelProveedores(tk.Frame):
 
         tk.Label(self, text="GESTIÓN DE PROVEEDORES Y PEDIDOS", bg="#3A8D96", fg="white", font=("Arial", 11, "bold")).pack(fill="x", pady=5)
         
-        # --- BOTONERA SUPERIOR ---
         frame_btns = tk.Frame(self, bg=estilos.FONDO)
         frame_btns.pack(pady=10)
         tk.Button(frame_btns, text="+ NUEVO PEDIDO MANUAL", bg="#27AE60", fg="white", command=self.nuevo_pedido).pack(side="left", padx=10)
         tk.Button(frame_btns, text="VER PEDIDOS ACTIVOS", bg="#2980B9", fg="white", command=self.ver_pedidos).pack(side="left", padx=10)
-        tk.Button(frame_btns, text="- ELIMINAR PROVEEDOR", bg="#E74C3C", fg="white", command=self.eliminar_proveedor_seleccionado).pack(side="left")
+        tk.Button(frame_btns, text="- ELIMINAR SELECCIONADO", bg="#E74C3C", fg="white", command=self.eliminar_proveedor_seleccionado).pack(side="left")
 
-        # --- TABLA DE PROVEEDORES ---
-        # Aseguramos que la tabla permita la selección para poder eliminar
-        cols = ("ID", "NOMBRE", "TELÉFONO", "CORREO")
-        self.tabla = ttk.Treeview(self, columns=cols, show="headings", height=15, selectmode="browse")
-        for c in cols: 
+        cols = ("SEL", "ID", "NOMBRE", "TELÉFONO", "CORREO")
+        self.tabla = ttk.Treeview(self, columns=cols, show="headings", height=15)
+        
+        self.tabla.heading("SEL", text="[ ]")
+        self.tabla.column("SEL", width=40, anchor="center")
+        
+        anchos = {"ID": 60, "NOMBRE": 300, "TELÉFONO": 150, "CORREO": 250}
+        for c in cols[1:]: 
             self.tabla.heading(c, text=c)
-            self.tabla.column(c, anchor="center", width=150)
+            self.tabla.column(c, anchor="center", width=anchos[c])
+            
         self.tabla.pack(fill="both", expand=True, padx=20, pady=10)
+        self.tabla.bind("<ButtonRelease-1>", self.toggle_sel)
         self.refrescar()
+
+    def toggle_sel(self, event):
+        item = self.tabla.identify_row(event.y)
+        if item:
+            vals = list(self.tabla.item(item, "values"))
+            vals[0] = "☑" if vals[0] == "☐" else "☐"
+            self.tabla.item(item, values=vals)
+
+    def obtener_seleccionados(self):
+        return [self.tabla.item(i)["values"] for i in self.tabla.get_children() if self.tabla.item(i)["values"][0] == "☑"]
 
     def refrescar(self):
         for row in self.tabla.get_children(): 
             self.tabla.delete(row)
         for p in self.controlador.obtener_proveedores():
-            self.tabla.insert("", "end", values=(p["id"], p["nombre"], p.get("telefono", ""), p.get("correo", "")))
+            self.tabla.insert("", "end", values=("☐", p["id"], p["nombre"], p.get("telefono", ""), p.get("correo", "")))
 
     def eliminar_proveedor_seleccionado(self):
-        """Identifica qué proveedor seleccionó el usuario y solicita su eliminación."""
-        seleccion = self.tabla.selection()
-        if not seleccion:
-            messagebox.showwarning( "Selecciona un proveedor de la tabla haciendo clic en él para eliminarlo.")
+        sel = self.obtener_seleccionados()
+        if not sel:
+            messagebox.showwarning("Aviso", "Marca la casilla del proveedor a eliminar.")
             return
 
-        # Obtener los datos de la fila seleccionada
-        item = self.tabla.item(seleccion[0])
-        id_prov = item["values"][0]
-        nombre_prov = item["values"][1]
+        id_prov, nombre_prov = sel[0][1], sel[0][2]
 
-        respuesta = messagebox.askyesno("Confirmar Eliminación", f"¿Estás seguro de que deseas eliminar al proveedor '{nombre_prov}'?\n\nNota: No podrás eliminarlo si tiene pedidos registrados en el historial.")
-        
-        if respuesta:
-            # Llama a la base de datos a través del controlador
+        if messagebox.askyesno("Confirmar", f"¿Eliminar a '{nombre_prov}'?\n(No se puede si tiene pedidos registrados)"):
             if self.controlador.eliminar_proveedor(id_prov):
-                messagebox.showinfo("Proveedor eliminado correctamente.")
+                messagebox.showinfo("Éxito", "Proveedor eliminado.")
                 self.refrescar()
             else:
-                messagebox.showerror("Error", "No se pudo eliminar el proveedor. Es posible que tenga pedidos activos o históricos vinculados a él.")
+                messagebox.showerror("Error", "No se pudo eliminar. Tiene pedidos vinculados.")
 
-    # --- (A CONTINUACIÓN DEBE IR EL RESTO DE TUS FUNCIONES PARA PEDIDOS Y CARRITO) ---
     def _cargar_prods(self, event):
         prov = next((p for p in self.controlador.obtener_proveedores() if p["nombre"] == self.cmb_prov.get()), None)
         if prov:
@@ -68,24 +74,17 @@ class PanelProveedores(tk.Frame):
         try:
             prod_nombre = self.cmb_prods.get()
             texto_cant = self.e_cant.get().strip()
-            
-            if not texto_cant:
-                messagebox.showwarning("Atención", "Ingresa una cantidad.")
-                return
-                
+            if not texto_cant: return messagebox.showwarning("Atención", "Ingresa una cantidad.")
             cant = int(texto_cant)
-            if cant <= 0:
-                messagebox.showwarning("Atención", "La cantidad debe ser mayor a cero.")
-                return
+            if cant <= 0: return messagebox.showwarning("Atención", "La cantidad debe ser mayor a cero.")
             
             for p in self.productos_prov:
                 if p["nombre"] == prod_nombre:
-                    costo_val = float(self.e_costo.get().replace('Costo $', '').strip() or p["costo"])
-                    self.carrito_pedido.append({"id": p["id"], "cant": cant, "costo": costo_val})
+                    costo_val = float(self.e_costo.get().replace('Costo $', '').strip() or p.get("costo", p.get("precio_venta", 0)))
+                    self.carrito_pedido.append({"id_producto": p["id"], "cantidad": cant, "costo_unitario": costo_val})
                     self.tabla_modal.insert("", "end", values=(prod_nombre, cant, f"${costo_val:.2f}"))
                     self.e_cant.delete(0, 'end')
                     break
-                    
         except ValueError:
             messagebox.showerror("Error", "La cantidad debe ser un número entero.")
 
@@ -122,6 +121,7 @@ class PanelProveedores(tk.Frame):
         self.tabla_modal = ttk.Treeview(self.modal, columns=("PROD", "CANT", "COSTO"), show="headings", height=8)
         for c in ("PROD", "CANT", "COSTO"): 
             self.tabla_modal.heading(c, text=c)
+        self.tabla_modal.column("PROD", width=250); self.tabla_modal.column("CANT", width=50); self.tabla_modal.column("COSTO", width=80)
         self.tabla_modal.pack(fill="x", padx=20, pady=10)
 
         self.cmb_prov.bind("<<ComboboxSelected>>", self._cargar_prods)
@@ -135,7 +135,9 @@ class PanelProveedores(tk.Frame):
         modal.title("Pedidos Activos")
 
         tabla = ttk.Treeview(modal, columns=("ID", "PROD", "CANT", "TOTAL"), show="headings")
-        for c in ("ID", "PROD", "CANT", "TOTAL"): tabla.heading(c, text=c)
+        for c in ("ID", "PROD", "CANT", "TOTAL"): 
+            tabla.heading(c, text=c)
+        tabla.column("ID", width=80); tabla.column("PROD", width=300); tabla.column("CANT", width=80); tabla.column("TOTAL", width=100)
         tabla.pack(fill="both", expand=True, padx=10, pady=10)
 
         for p in self.controlador.obtener_pedidos_activos():

@@ -1,5 +1,6 @@
 import tkinter as tk
 from vistas import estilos
+
 FUENTE_EMOJI = ("Segoe UI EMOJI", 38)
 
 class PanelInicio(tk.Frame):
@@ -13,7 +14,6 @@ class PanelInicio(tk.Frame):
 
         inventario = self.controlador.modelo.inventario
         productos_disponibles = [p for p in inventario if p["stock"] > 0]
-        # Cambiado a 5 productos más bajos
         productos_bajo_stock = sorted(inventario, key=lambda p: p["stock"])[:5]
 
         def crear_tarjeta(titulo):
@@ -56,4 +56,3 @@ class PanelInicio(tk.Frame):
         tk.Label(tarjeta_cobro, text="¡Caja abierta y lista\npara operar!", bg=estilos.BLANCO, fg="#555555", font=("Arial", 11), justify="center").pack(pady=(25, 15))
         tk.Button(tarjeta_cobro, text="INICIAR VENTA", bg="#F4D03F", fg=estilos.NEGRO, activebackground="#E5C12E", font=("Arial", 10, "bold"), relief="flat", cursor="hand2", padx=15, pady=8, command=lambda: self.comando_navegar("NUEVA VENTA")).pack()
         tk.Label(tarjeta_cobro, text="🧾", bg=estilos.BLANCO, fg="#555555", font=FUENTE_EMOJI).pack(pady=18)
-        
