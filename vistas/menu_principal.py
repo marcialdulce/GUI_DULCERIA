@@ -12,7 +12,6 @@ from vistas.panel_proveedores import PanelProveedores
 from vistas.panel_cierre_caja import PanelCierreCaja
 from vistas.header import LogoDulceriaHeader
 
-
 class MenuPrincipal(tk.Frame):
     def __init__(self, parent, controlador):
         super().__init__(parent, bg=estilos.FONDO)
@@ -22,11 +21,8 @@ class MenuPrincipal(tk.Frame):
         self.opciones_actuales = []
 
         self.header = LogoDulceriaHeader(
-            parent=self, 
-            usuario_activo="", 
-            comando_logout=self.controlador.cerrar_sesion, 
-            logo_path="assets/logo_dulce.jpg", 
-            user_icon_path="assets/user_icon.png"
+            parent=self, usuario_activo="", comando_logout=self.controlador.cerrar_sesion, 
+            logo_path="assets/logo_dulce.jpg", user_icon_path="assets/user_icon.png"
         )
         self.header.pack(fill="x")
 
@@ -74,10 +70,9 @@ class MenuPrincipal(tk.Frame):
         for widget in self.contenido.winfo_children():
             widget.destroy()
 
-        #  DICCIONARIO DE PANELES
         paneles = {
             "INICIO": lambda: PanelInicio(self.contenido, self.controlador, self.mostrar_seccion),
-            "NUEVA VENTA": lambda: PanelVentas(self.contenido, self.controlador),
+            "NUEVA VENTA": lambda: PanelVentas(self.contenido, self.controlador, ir_a_cobros=lambda: self.mostrar_seccion("COBROS Y PAGOS")),
             "PUNTO DE VENTA": lambda: PanelVentas(self.contenido, self.controlador, modo_punto_venta=True, ir_a_cobros=lambda: self.mostrar_seccion("COBROS Y PAGOS")),
             "COBROS Y PAGOS": lambda: PanelCobros(self.contenido, self.controlador),
             "INVENTARIO": lambda: PanelInventario(self.contenido, self.controlador),
@@ -89,7 +84,6 @@ class MenuPrincipal(tk.Frame):
             "CIERRE DE CAJA": lambda: PanelCierreCaja(self.contenido, self.controlador)
         }
 
-        # Buscamos la opción en el diccionario y la ejecutamos
         generador_panel = paneles.get(opcion)
         if generador_panel:
             panel = generador_panel()

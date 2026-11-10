@@ -1,21 +1,14 @@
 import uuid
-import threading
 from datetime import datetime
 from modelos.conexion import conectar_bd
 
 FORMATO_FECHA = "%Y-%m-%d %H:%M:%S"
 
-
 class RepositorioVentas:
     def __init__(self):
         self.conexion_bd = conectar_bd
-        self._lock = threading.Lock()
 
-    # ------------------------------------------------------------------
-    # Registrar UNA venta (transacción única: venta + detalles + stock + factura)
-    # ------------------------------------------------------------------
-    def registrar(self, metodo_pago, total, articulos, facturado=False, usuario_actual=None,
-                  id_turno=None, datos_factura=None, descontar_stock=True):
+    def registrar(self, articulos, pagos, id_corte_caja, datos_factura=None):
         conexion = conectar_bd()
         if not conexion:
             raise ConnectionError("No hay conexión con la base de datos.")
@@ -24,136 +17,112 @@ class RepositorioVentas:
             cursor = conexion.cursor(dictionary=True)
             folio = "V-" + uuid.uuid4().hex[:8].upper()
             fecha_hora = datetime.now().strftime(FORMATO_FECHA)
-            ticket_pdf = f"tickets/Ticket_{folio}.pdf"
-
-            id_usuario = None
-            if usuario_actual:
-                cursor.execute("SELECT id_usuario FROM USUARIOS WHERE username = %s", (usuario_actual,))
-                fila = cursor.fetchone()
-                if fila: id_usuario = fila["id_usuario"]
+            
+            subtotal = sum(a["subtotal"] for a in articulos)
+            impuesto = round(subtotal * 0.16, 2)
 
             cursor.execute(
-                """INSERT INTO VENTAS (folio, fecha_hora, total, metodo_pago, facturada, ticket_pdf, id_usuario, id_turno)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
-                (folio, fecha_hora, float(total), metodo_pago, int(facturado), ticket_pdf, id_usuario, id_turno))
+                """INSERT INTO ventas (folio, fecha_hora, subtotal, impuesto, id_corte_caja)
+                   VALUES (%s,%s,%s,%s,%s)""",
+                (folio, fecha_hora, subtotal, impuesto, id_corte_caja))
             id_venta = cursor.lastrowid
 
             for art in articulos:
-                cursor.execute("SELECT id_producto FROM PRODUCTOS WHERE nombre_dulce = %s", (art["producto"],))
-                id_producto = cursor.fetchone()["id_producto"]
-                cantidad = int(art["cantidad"])
-                precio_unit = round(float(art["subtotal"]) / cantidad, 2)
                 cursor.execute(
-                    """INSERT INTO DETALLES_VENTAS (cantidad, precio_unitario, subtotal, id_venta, id_producto)
+                    """INSERT INTO detalles_ventas (cantidad, precio_unitario, subtotal, id_venta, id_producto)
                        VALUES (%s,%s,%s,%s,%s)""",
-                    (cantidad, precio_unit, float(art["subtotal"]), id_venta, id_producto))
-                if descontar_stock:
-                    # Condición stock >= cantidad: evita vender lo que ya no hay (dos cajas a la vez)
-                    cursor.execute(
-                        "UPDATE PRODUCTOS SET stock_actual = stock_actual - %s WHERE id_producto = %s AND stock_actual >= %s",
-                        (cantidad, id_producto, cantidad))
-                    if cursor.rowcount == 0:
-                        raise ValueError(f"Stock insuficiente de '{art['producto']}'.")
+                    (art["cantidad"], art["precio_unitario"], art["subtotal"], id_venta, art["id_producto"]))
+                id_detalle_venta = cursor.lastrowid
 
-            if facturado and datos_factura:
+                cursor.execute("""SELECT stock_resultante FROM movimientos_inventario 
+                                  WHERE id_producto = %s ORDER BY id_movimiento_inventario DESC LIMIT 1""", (art["id_producto"],))
+                res_stock = cursor.fetchone()
+                stock_actual = res_stock["stock_resultante"] if res_stock else 0
+                nuevo_stock = stock_actual - art["cantidad"]
+
                 cursor.execute(
-                    """INSERT INTO FACTURA (nombre, apellidos, rfc, correo, id_venta)
-                       VALUES (%s,%s,%s,%s,%s)""",
-                    (datos_factura.get("nombre", ""), datos_factura.get("apellidos", ""),
-                     datos_factura.get("rfc", ""), datos_factura.get("correo", ""), id_venta))
+                    """INSERT INTO movimientos_inventario (tipo, cantidad, stock_resultante, id_producto, id_detalle_venta)
+                       VALUES ('salida', %s, %s, %s, %s)""",
+                    (-art["cantidad"], nuevo_stock, art["id_producto"], id_detalle_venta))
+
+            for pago in pagos:
+                cursor.execute(
+                    """INSERT INTO pagos_ventas (monto, id_venta, id_metodo_pago, id_corte_caja)
+                       VALUES (%s,%s,%s,%s)""",
+                    (pago["monto"], id_venta, pago["id_metodo_pago"], id_corte_caja))
+
+            if datos_factura and datos_factura.get("requiere"):
+                cursor.execute(
+                    """INSERT INTO facturas (folio, rfc, razon_social, regimen_fiscal, cp_fiscal, correo, total, id_venta)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+                    (f"FAC-{folio}", datos_factura["rfc"], datos_factura.get("razon_social", "Público General"), 
+                     datos_factura.get("regimen", "626"), datos_factura.get("cp", "39360"), 
+                     datos_factura.get("correo", ""), subtotal + impuesto, id_venta))
 
             conexion.commit()
-            return {"id_venta": id_venta, "folio": folio, "fecha": fecha_hora, "metodo_pago": metodo_pago,
-                    "total": total, "articulos": articulos, "ticket_pdf": ticket_pdf}
-        except Exception:
+            return {"id_venta": id_venta, "folio": folio, "total": subtotal + impuesto}
+        except Exception as e:
             conexion.rollback()
-            raise
+            raise e
         finally:
             if cursor: cursor.close()
             conexion.close()
 
-    def actualizar_ruta_factura(self, id_venta, ruta_pdf):
-        """Guarda dónde quedó el PDF de la factura (el usuario lo elige DESPUÉS de cobrar)."""
+    def efectivo_turno(self, id_corte_caja):
         conexion = conectar_bd()
-        if not conexion: return
+        if not conexion: return 0.0
         try:
             cur = conexion.cursor()
-            cur.execute("UPDATE FACTURA SET ruta_pdf = %s WHERE id_venta = %s", (ruta_pdf, id_venta))
-            conexion.commit()
-            cur.close()
+            cur.execute("SELECT COALESCE(SUM(monto), 0) FROM pagos_ventas WHERE id_corte_caja = %s AND id_metodo_pago = 1", (id_corte_caja,))
+            efectivo_ventas = float(cur.fetchone()[0])
+            
+            cur.execute("SELECT COALESCE(SUM(monto), 0) FROM pagos_apartados WHERE id_corte_caja = %s AND id_metodo_pago = 1", (id_corte_caja,))
+            efectivo_apartados = float(cur.fetchone()[0])
+            
+            return efectivo_ventas + efectivo_apartados
         finally:
             conexion.close()
 
-    # ------------------------------------------------------------------
-    # Carga masiva (script demo): una sola conexión, sin tocar el stock
-    # ------------------------------------------------------------------
-    def registrar_lote(self, ventas):
-        conexion = conectar_bd()
-        if not conexion:
-            raise ConnectionError("No hay conexión con la base de datos.")
-        try:
-            cur = conexion.cursor(dictionary=True)
-            cur.execute("SELECT nombre_dulce, id_producto FROM PRODUCTOS")
-            ids = {f["nombre_dulce"]: f["id_producto"] for f in cur.fetchall()}
-            for v in ventas:
-                cur.execute(
-                    """INSERT INTO VENTAS (folio, fecha_hora, total, metodo_pago, facturada, ticket_pdf)
-                       VALUES (%s,%s,%s,%s,%s,%s)""",
-                    (v["folio"], v["fecha"], v["total"], v["metodo_pago"], int(v.get("facturado", False)),
-                     f"tickets/Ticket_{v['folio']}.pdf"))
-                id_venta = cur.lastrowid
-                filas = [(int(a["cantidad"]), round(float(a["subtotal"]) / int(a["cantidad"]), 2),
-                          float(a["subtotal"]), id_venta, ids[a["producto"]]) for a in v["articulos"]]
-                cur.executemany(
-                    """INSERT INTO DETALLES_VENTAS (cantidad, precio_unitario, subtotal, id_venta, id_producto)
-                       VALUES (%s,%s,%s,%s,%s)""", filas)
-            conexion.commit()
-        except Exception:
-            conexion.rollback()
-            raise
-        finally:
-            conexion.close()
-
-    # ------------------------------------------------------------------
-    # Lectura
-    # ------------------------------------------------------------------
     def tamano_actual(self, usuario=None):
         conexion = conectar_bd()
         if not conexion: return 0
         try:
             cur = conexion.cursor()
             if usuario:
-                cur.execute("""SELECT COUNT(*) FROM VENTAS v JOIN USUARIOS u ON v.id_usuario = u.id_usuario
+                cur.execute("""SELECT COUNT(*) FROM ventas v 
+                               JOIN cortes_caja c ON v.id_corte_caja = c.id_corte_caja 
+                               JOIN usuarios u ON c.id_usuario = u.id_usuario
                                WHERE u.username = %s""", (usuario,))
             else:
-                cur.execute("SELECT COUNT(*) FROM VENTAS")
-            total = cur.fetchone()[0]
-            cur.close()
-            return total
+                cur.execute("SELECT COUNT(*) FROM ventas")
+            return cur.fetchone()[0]
         finally:
             conexion.close()
 
     def iterar(self, limite_registros, usuario=None):
-        """Un solo JOIN (antes: 1 consulta por venta). Devuelve (venta_dict, n_leidas)."""
         conexion = conectar_bd()
         if not conexion: return
         try:
             cursor = conexion.cursor(dictionary=True, buffered=False)
             sql = """
-                SELECT v.id_venta, v.folio, v.fecha_hora, v.total, v.metodo_pago, v.ticket_pdf, v.facturada,
-                       dv.cantidad, dv.subtotal, p.nombre_dulce AS producto
-                FROM VENTAS v
-                LEFT JOIN DETALLES_VENTAS dv ON dv.id_venta = v.id_venta
-                LEFT JOIN PRODUCTOS p ON p.id_producto = dv.id_producto
+                SELECT v.id_venta, v.folio, v.fecha_hora, v.subtotal, v.impuesto,
+                       p.nombre_dulce as producto, dv.cantidad, dv.subtotal as sub_detalle,
+                       (SELECT GROUP_CONCAT(DISTINCT mp.nombre_metodo_pago SEPARATOR ' + ') 
+                        FROM pagos_ventas pv 
+                        JOIN metodos_pago mp ON pv.id_metodo_pago = mp.id_metodo_pago 
+                        WHERE pv.id_venta = v.id_venta) as metodo_pago
+                FROM ventas v
+                LEFT JOIN detalles_ventas dv ON dv.id_venta = v.id_venta
+                LEFT JOIN productos p ON p.id_producto = dv.id_producto
                 {filtro}
                 ORDER BY v.id_venta ASC
             """
             if usuario:
-                filtro = "WHERE v.id_usuario = (SELECT id_usuario FROM USUARIOS WHERE username = %s)"
+                filtro = "JOIN cortes_caja c ON v.id_corte_caja = c.id_corte_caja JOIN usuarios u ON c.id_usuario = u.id_usuario WHERE u.username = %s"
                 cursor.execute(sql.replace("{filtro}", filtro), (usuario,))
             else:
                 cursor.execute(sql.replace("{filtro}", ""))
-
+            
             actual, leidas = None, 0
             for fila in cursor:
                 if actual is None or fila["id_venta"] != actual["_id"]:
@@ -161,12 +130,12 @@ class RepositorioVentas:
                         leidas += 1
                         if leidas > limite_registros: return
                         yield self._sin_id(actual), leidas
+                    total_v = float(fila["subtotal"]) + float(fila["impuesto"])
                     actual = {"_id": fila["id_venta"], "folio": fila["folio"], "fecha": str(fila["fecha_hora"]),
-                              "metodo_pago": fila["metodo_pago"], "total": float(fila["total"]),
-                              "ticket_pdf": fila["ticket_pdf"], "facturada": bool(fila["facturada"]), "articulos": []}
+                              "metodo_pago": fila["metodo_pago"] or "Efectivo", "total": total_v,
+                              "articulos": []}
                 if fila["producto"] is not None:
-                    actual["articulos"].append({"producto": fila["producto"], "cantidad": fila["cantidad"],
-                                                "subtotal": float(fila["subtotal"])})
+                    actual["articulos"].append({"producto": fila["producto"], "cantidad": fila["cantidad"], "subtotal": float(fila["sub_detalle"])})
             if actual is not None:
                 leidas += 1
                 if leidas <= limite_registros:
@@ -178,19 +147,3 @@ class RepositorioVentas:
     @staticmethod
     def _sin_id(v):
         v = dict(v); v.pop("_id", None); return v
-
-    def obtener_todas(self, usuario=None):
-        return [v for v, _ in self.iterar(float("inf"), usuario)]
-
-    def efectivo_turno(self, id_turno):
-        """Efectivo que DEBE haber en caja por las ventas en efectivo de ese turno (cálculo en SQL)."""
-        conexion = conectar_bd()
-        if not conexion: return 0.0
-        try:
-            cur = conexion.cursor()
-            cur.execute("SELECT COALESCE(SUM(total),0) FROM VENTAS WHERE id_turno = %s AND metodo_pago = 'Efectivo'", (id_turno,))
-            total = float(cur.fetchone()[0])
-            cur.close()
-            return total
-        finally:
-            conexion.close()

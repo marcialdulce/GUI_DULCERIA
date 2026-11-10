@@ -1,163 +1,123 @@
-
-import queue
-import threading
 import tkinter as tk
-from tkinter import messagebox, ttk
-from servicios.hilo_apartados import HiloApartados
-
+from tkinter import ttk, messagebox
+from datetime import datetime
 
 class PanelApartados(tk.Frame):
-
     def __init__(self, parent, controlador):
         super().__init__(parent, bg="#F9F4F0")
         self.controlador = controlador
 
-        # Datos reales desde MySQL (antes: solo si existía controlador.apartados, que nunca existía)
-        try:
-            self.apartados = self.controlador.obtener_lista_apartados()
-        except Exception as e:
-            messagebox.showerror("Apartados", f"No se pudieron leer los apartados:\n{e}")
-            self.apartados = []
-        for a in self.apartados:
-            a["precio"] = f"${float(a['precio']):.2f}"
-
-        self.lock = threading.Lock()
-        self.cola_resultados = queue.Queue()
-        self.hilo = None
-
-        self.crear_interfaz()
-
-    def crear_interfaz(self):
-        # TÍTULO
         titulo = tk.Frame(self, bg="#2D929A", height=35)
         titulo.pack(fill="x", side="top")
         titulo.pack_propagate(False)
+        tk.Label(titulo, text="CONTROL DE APARTADOS", bg="#2D929A", fg="white", font=("Arial", 11, "bold")).pack(side="left", padx=15)
 
-        tk.Label(
-            titulo,
-            text="CONTROL DE APARTADOS",
-            bg="#2D929A",
-            fg="white",
-            font=("Arial", 11, "bold"),
-        ).pack(side="left", padx=15)
+        frame_botones = tk.Frame(self, bg="#F9F4F0")
+        frame_botones.pack(fill="x", padx=15, pady=10)
+        
+        tk.Button(frame_botones, text="+ NUEVO APARTADO", bg="#27AE60", fg="white", 
+                  font=("Arial", 9, "bold"), command=self.abrir_nuevo_apartado).pack(side="left")
+        tk.Button(frame_botones, text="❌ CANCELAR APARTADO SELECCIONADO", bg="#C0392B", fg="white", 
+                  font=("Arial", 9, "bold"), command=self.cancelar_apartado).pack(side="right")
 
-        # SUBTÍTULO
-        subtitulo = tk.Frame(self, bg="#F9F4F0")
-        subtitulo.pack(fill="x", padx=15, pady=(10, 0))
-
-        tk.Label(
-            subtitulo,
-            text="Revisión de fechas límite (aviso con 3 días de anticipación)",
-            bg="#F9F4F0",
-            fg="#555555",
-            font=("Arial", 9),
-        ).pack(side="left")
-
-        self.boton_revisar = tk.Button(
-            subtitulo,
-            text="Revisar apartados",
-            bg="#2D929A",
-            fg="white",
-            font=("Arial", 9),
-            relief="flat",
-            padx=12,
-            pady=5,
-            command=self.iniciar_hilo,
-        )
-        self.boton_revisar.pack(side="right")
-
-        # TABLA DE APARTADOS
         frame_tabla = tk.Frame(self, bg="#F9F4F0")
         frame_tabla.pack(fill="both", expand=True, padx=15, pady=10)
-
-        columnas = (
-            "producto",
-            "nombre",
-            "fecha",
-            "precio",
-            "unidades",
-            "estado",
-        )
-        self.tabla = ttk.Treeview(
-            frame_tabla, columns=columnas, show="headings"
-        )
-
-        self.tabla.heading("producto", text="PRODUCTO")
-        self.tabla.heading("nombre", text="NOMBRE")
-        self.tabla.heading("fecha", text="FECHA DE ENTREGA")
-        self.tabla.heading("precio", text="PRECIO")
-        self.tabla.heading("unidades", text="UNIDADES APARTADAS")
-        self.tabla.heading("estado", text="ESTADO")
-
-        self.tabla.column("producto", width=180, anchor="center")
-        self.tabla.column("nombre", width=200, anchor="center")
-        self.tabla.column("fecha", width=180, anchor="center")
-        self.tabla.column("precio", width=120, anchor="center")
-        self.tabla.column("unidades", width=180, anchor="center")
-        self.tabla.column("estado", width=140, anchor="center")
-
+        
+        cols = ("ID", "CLIENTE", "PRODUCTO", "UNIDADES", "FECHA ENTREGA", "ESTADO")
+        self.tabla = ttk.Treeview(frame_tabla, columns=cols, show="headings")
+        for c in cols:
+            self.tabla.heading(c, text=c)
+            self.tabla.column(c, anchor="center", width=120)
         self.tabla.pack(fill="both", expand=True)
-
+        
         self.cargar_tabla()
 
     def cargar_tabla(self):
         for row in self.tabla.get_children():
             self.tabla.delete(row)
+        for item in self.controlador.obtener_lista_apartados():
+            self.tabla.insert("", "end", values=(
+                item["id_apartado"], item["nombre"], item["producto"], 
+                item["unidades"], item["fecha"], item["estado"]
+            ))
 
-        for item in self.apartados:
-            self.tabla.insert(
-                "",
-                "end",
-                values=(
-                    item.get("producto", ""),
-                    item.get("nombre", ""),
-                    item.get("fecha", ""),
-                    item.get("precio", ""),
-                    item.get("unidades", ""),
-                    item.get("estado", "Pendiente"),
-                ),
-            )
+    def cancelar_apartado(self):
+        sel = self.tabla.selection()
+        if not sel:
+            messagebox.showwarning("Selección", "Selecciona un apartado de la tabla.")
+            return
+        
+        # FIX: Extraer el primer elemento de la tupla
+        item = self.tabla.item(sel[0])
+        id_apartado = item["values"][0]
+        estado = item["values"][5]
 
-    def iniciar_hilo(self):
-        if self.hilo is not None and self.hilo.is_alive():
+        if estado == "cancelado":
+            messagebox.showinfo("Info", "Este apartado ya está cancelado.")
             return
 
-        self.boton_revisar.config(state="disabled")
-
-        # Usamos la clase HiloApartados importada desde servicios.hilo_apartados
-        self.hilo = HiloApartados(
-            apartados=self.apartados,
-            bloqueo=self.lock,
-            cola_resultados=self.cola_resultados,
-            dias_aviso=3,
+        confirmacion = messagebox.askyesno(
+            "Cancelar Apartado - Política Estricta", 
+            " ADVERTENCIA:\n\nPor políticas de la dulcería, si cancelas este apartado, el anticipo entregado NO ES REEMBOLSABLE bajo ninguna circunstancia.\n\n¿Deseas continuar con la cancelación?"
         )
-        self.hilo.start()
+        
+        if confirmacion:
+            self.controlador.cancelar_apartado(id_apartado)
+            messagebox.showinfo("Cancelado", "El apartado ha sido cancelado y el anticipo retenido.")
+            self.cargar_tabla()
 
-        # Sonda periódica mediante after() para revisar cuando haya resultados
-        self.verificar_cola()
+    def abrir_nuevo_apartado(self):
+        modal = tk.Toplevel(self)
+        modal.title("Registrar Nuevo Apartado")
+        
+        # Centrar ventana
+        ancho, alto = 400, 520
+        x = (modal.winfo_screenwidth() // 2) - (ancho // 2)
+        y = (modal.winfo_screenheight() // 2) - (alto // 2)
+        modal.geometry(f"{ancho}x{alto}+{x}+{y}")
+        
+        modal.config(bg="#F9F4F0")
+        modal.grab_set()
 
-    def verificar_cola(self):
-        try:
-            # Intenta sacar resultado de la cola enviada por HiloApartados
-            res = self.cola_resultados.get_nowait()
-            self.boton_revisar.config(state="normal")
+        tk.Label(modal, text="NOMBRE DEL CLIENTE:", bg="#F9F4F0").pack(pady=(15, 5))
+        entry_nombre = tk.Entry(modal, width=30)
+        entry_nombre.pack()
 
-            if res.get("ok"):
-                avisos = res.get("avisos", [])
-                if avisos:
-                    lineas = [a["mensaje"] for a in avisos]
-                    texto_mensaje = "\n".join(lineas)
-                    messagebox.showwarning("Avisos de apartados", texto_mensaje)
-                else:
-                    messagebox.showinfo(
-                        "Avisos de apartados",
-                        "No hay apartados próximos a vencer ni vencidos.",
-                    )
+        tk.Label(modal, text="TELÉFONO:", bg="#F9F4F0").pack(pady=5)
+        entry_tel = tk.Entry(modal, width=30)
+        entry_tel.pack()
+
+        tk.Label(modal, text="FECHA DE ENTREGA (AAAA-MM-DD):", bg="#F9F4F0").pack(pady=5)
+        entry_fecha = tk.Entry(modal, width=30)
+        entry_fecha.insert(0, datetime.now().strftime("%Y-%m-%d"))
+        entry_fecha.pack()
+
+        tk.Label(modal, text="PRODUCTO (Solo con stock):", bg="#F9F4F0").pack(pady=5)
+        productos = self.controlador.obtener_nombres_productos()
+        combo_prod = ttk.Combobox(modal, values=productos, width=28, state="readonly")
+        combo_prod.pack()
+
+        tk.Label(modal, text="CANTIDAD:", bg="#F9F4F0").pack(pady=5)
+        entry_cant = tk.Entry(modal, width=30)
+        entry_cant.pack()
+
+        tk.Label(modal, text="MÉTODO DE PAGO DEL ANTICIPO:", bg="#F9F4F0").pack(pady=5)
+        combo_metodo = ttk.Combobox(modal, values=["Efectivo", "Tarjeta de débito", "Tarjeta de crédito"], width=28, state="readonly")
+        combo_metodo.current(0)
+        combo_metodo.pack()
+
+        tk.Label(modal, text="(El sistema cobrará un anticipo del 50% obligatorio)", fg="red", bg="#F9F4F0", font=("Arial", 9, "italic")).pack(pady=15)
+
+        def guardar():
+            exito, mensaje = self.controlador.registrar_apartado(
+                entry_nombre.get().strip(), entry_tel.get().strip(), entry_fecha.get().strip(),
+                combo_prod.get(), entry_cant.get(), combo_metodo.get()
+            )
+            if exito:
+                messagebox.showinfo("Éxito", mensaje)
+                modal.destroy()
+                self.cargar_tabla()
             else:
-                messagebox.showerror(
-                    "Error", f"Ocurrió un error en el hilo: {res.get('error')}"
-                )
+                messagebox.showerror("Error", mensaje)
 
-        except queue.Empty:
-            # Si el hilo sigue trabajando, volvemos a checar en 100 ms
-            self.after(100, self.verificar_cola)
+        tk.Button(modal, text="COBRAR ANTICIPO Y GUARDAR", bg="#27AE60", fg="white", font=("Arial", 10, "bold"), command=guardar).pack(pady=15)

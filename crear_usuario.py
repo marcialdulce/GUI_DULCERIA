@@ -1,38 +1,24 @@
-import bcrypt
+"""Alta de usuarios con contraseña protegida.
+Uso:  python crear_usuario.py <username> <Administrador|Cajero> "<Nombre>" "<Ap. paterno>" [ap_materno]
+"""
+import getpass
+import sys
 from modelos.conexion import conectar_bd
+from seguridad import hashear_password
 
-def crear_usuario_admin():
-    print("--- CREAR NUEVO USUARIO ADMINISTRADOR ---")
-    username = input("Username: ")
-    password = input("Contraseña: ")
-    nombre = input("Nombre: ")
-    ap_paterno = input("Apellido Paterno: ")
-    ap_materno = input("Apellido Materno: ")
+if len(sys.argv) < 5:
+    sys.exit(__doc__)
+username, rol, nombre, ap_pat = sys.argv[1:5]
+ap_mat = sys.argv[5] if len(sys.argv) > 5 else None
+pwd = getpass.getpass("Contraseña: ")
+if len(pwd) < 6:
+    sys.exit("La contraseña debe tener al menos 6 caracteres.")
 
-    # Encriptar la contraseña (truncada a 72 bytes máximo por requerimiento de bcrypt)
-    salt = bcrypt.gensalt()
-    password_hash = bcrypt.hashpw(password.encode('utf-8')[:72], salt).decode('utf-8')
-
-    # Conectar a la base de datos
-    conexion = conectar_bd()
-    if conexion:
-        try:
-            cursor = conexion.cursor()
-            # Insertamos con id_rol = 1 para que sea Administrador
-            query = """
-                INSERT INTO usuarios (username, password_hash, nombre, ap_paterno, ap_materno, estado, id_rol)
-                VALUES (%s, %s, %s, %s, %s, 'activo', 1)
-            """
-            cursor.execute(query, (username, password_hash, nombre, ap_paterno, ap_materno))
-            conexion.commit()
-            print(f"\n¡Éxito! El usuario '{username}' ha sido creado como Administrador.")
-            print("Ya puedes iniciar sesión en el sistema.")
-        except Exception as e:
-            print(f"\nError al crear el usuario en la BD: {e}")
-        finally:
-            if conexion.is_connected():
-                cursor.close()
-                conexion.close()
-
-if __name__ == "__main__":
-    crear_usuario_admin()
+con = conectar_bd()
+cur = con.cursor()
+cur.execute("""INSERT INTO usuarios (username, password_hash, nombre, ap_paterno, ap_materno, id_rol)
+               VALUES (%s,%s,%s,%s,%s,(SELECT id_rol FROM roles WHERE nombre_rol=%s))""",
+            (username, hashear_password(pwd), nombre, ap_pat, ap_mat, rol))
+con.commit()
+con.close()
+print("Usuario creado.")
