@@ -69,12 +69,13 @@ class ResumenVentas:
 class TareaCargarVentas:
     """Runnable: lee el archivo de ventas y calcula el resumen."""
 
-    def __init__(self, repositorio, cola, cancelar, fecha_filtro="", tam_bloque=TAM_BLOQUE):
+    def __init__(self, repositorio, cola, cancelar, fecha_filtro="", tam_bloque=TAM_BLOQUE, usuario_filtro=None):
         self.repo = repositorio
         self.cola = cola
         self.cancelar = cancelar              # threading.Event: "por favor, detente"
         self.fecha_filtro = fecha_filtro      # prefijo: "2026", "2026-10" o "2026-10-18"
         self.tam_bloque = tam_bloque
+        self.usuario_filtro = usuario_filtro  # un cajero solo ve SUS ventas
 
     def _avisar(self, tipo, **datos):
         self.cola.put({"tarea": "carga", "tipo": tipo, **datos})
@@ -82,32 +83,21 @@ class TareaCargarVentas:
     def run(self):
         inicio = time.perf_counter()
         try:
-            # Foto del tamaño: solo se leerá hasta aquí (ver repositorio_ventas)
-            limite = self.repo.tamano_actual()
+            limite = self.repo.tamano_actual(self.usuario_filtro)
             resumen = ResumenVentas(fecha_filtro=self.fecha_filtro)
             ultimas = deque(maxlen=MAX_FILAS_TABLA)
             leidas = 0
 
-            for venta, bytes_leidos in self.repo.iterar(limite):
+            for venta, bytes_leidos in self.repo.iterar(limite, self.usuario_filtro):
                 leidas += 1
+                
+                # 1. Delegamos el procesamiento de la venta a una función auxiliar
+                self._procesar_venta_individual(venta, resumen, ultimas)
 
-                if venta is None:
-                    resumen.lineas_invalidas += 1
-                else:
-                    try:
-                        if self._acumular(resumen, venta):
-                            ultimas.append(venta)
-                    except (KeyError, TypeError, ValueError, AttributeError):
-                        resumen.lineas_invalidas += 1   # línea con formato inesperado
-
-                if leidas % self.tam_bloque == 0:
-                    if self.cancelar.is_set():
-                        self._avisar("cancelado")
-                        return
-                    porcentaje = min(100.0, bytes_leidos * 100 / limite) if limite else 100.0
-                    self._avisar("progreso", porcentaje=porcentaje, leidas=leidas)
-                    if PAUSA_DEMO_SEGUNDOS:
-                        time.sleep(PAUSA_DEMO_SEGUNDOS)
+                # 2. Delegamos la verificación de progreso y cancelación
+                if not self._verificar_progreso(leidas, bytes_leidos, limite):
+                    self._avisar("cancelado")
+                    return
 
             resumen.ultimas = list(ultimas)
             resumen.segundos = time.perf_counter() - inicio
@@ -116,8 +106,35 @@ class TareaCargarVentas:
 
         except OSError as e:
             self._avisar("error", mensaje=f"No se pudo leer el archivo de ventas: {e.strerror or e}")
-        except Exception as e:  # último recurso: que el hilo nunca muera en silencio
+        except Exception as e:  
             self._avisar("error", mensaje=f"Error inesperado al procesar las ventas: {e}")
+
+    # --- NUEVOS MÉTODOS AUXILIARES PARA REDUCIR LA COMPLEJIDAD ---
+
+    def _procesar_venta_individual(self, venta, resumen, ultimas):
+        """Procesa una sola línea de venta extraída del ciclo principal."""
+        if venta is None:
+            resumen.lineas_invalidas += 1
+            return
+        
+        try:
+            if self._acumular(resumen, venta):
+                ultimas.append(venta)
+        except (KeyError, TypeError, ValueError, AttributeError):
+            resumen.lineas_invalidas += 1
+
+    def _verificar_progreso(self, leidas, bytes_leidos, limite):
+        """Notifica el progreso y verifica si se debe cancelar la tarea. Retorna False si se canceló."""
+        if leidas % self.tam_bloque == 0:
+            if self.cancelar.is_set():
+                return False
+            
+            porcentaje = min(100.0, bytes_leidos * 100 / limite) if limite else 100.0
+            self._avisar("progreso", porcentaje=porcentaje, leidas=leidas)
+            
+            if PAUSA_DEMO_SEGUNDOS:
+                time.sleep(PAUSA_DEMO_SEGUNDOS)
+        return True
 
     def _acumular(self, resumen, venta):
         """Suma una venta al resumen. Devuelve False si el filtro de fecha la excluye.

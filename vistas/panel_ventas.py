@@ -2,9 +2,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from vistas import estilos
 
-DEBITO = "Débito"
-CREDITO = "Crédito"
-EVENTO_RUEDA = "<MouseWheel>"
+MAX_TARJETAS = 40        
+MS_ESPERA_BUSQUEDA = 250  
 
 class PanelVentas(tk.Frame):
     def __init__(self, parent, controlador, modo_punto_venta=False, ir_a_cobros=None):
@@ -13,13 +12,9 @@ class PanelVentas(tk.Frame):
         self.modo_punto_venta = modo_punto_venta
         self.ir_a_cobros = ir_a_cobros
 
-        # Contenedor principal que se expande de forma responsiva al dividir pantalla
         contenedor_principal = tk.Frame(self, bg=estilos.FONDO)
         contenedor_principal.pack(fill="both", expand=True, padx=15, pady=15)
 
-        # ====================================================
-        # PANEL IZQUIERDO (Buscador y Catálogo)
-        # ====================================================
         panel_izq = tk.Frame(contenedor_principal, bg=estilos.FONDO)
         panel_izq.pack(side="left", fill="both", expand=True, padx=(0, 10))
 
@@ -30,37 +25,22 @@ class PanelVentas(tk.Frame):
         tk.Label(barra_busqueda, text="BUSCAR PRODUCTO", bg="#3A8D96", fg=estilos.BLANCO, font=("Arial", 10, "bold")).pack(side="left", padx=10)
         self.txt_buscar_venta = tk.Entry(barra_busqueda, width=20)
         self.txt_buscar_venta.pack(side="right", padx=10, pady=8)
+        self._id_busqueda = None
+        self.txt_buscar_venta.bind("<KeyRelease>", self._programar_busqueda)
 
         self.canvas_productos = tk.Canvas(panel_izq, bg="#EAEAEA", highlightthickness=0)
         self.scrollbar = ttk.Scrollbar(panel_izq, orient="vertical", command=self.canvas_productos.yview)
         self.canvas_productos.configure(yscrollcommand=self.scrollbar.set)
-
         self.scrollbar.pack(side="right", fill="y")
         self.canvas_productos.pack(side="left", fill="both", expand=True)
 
         self.frame_lista = tk.Frame(self.canvas_productos, bg="#EAEAEA")
-
-        # Insertar el Frame interior dentro del Canvas
         self.canvas_window = self.canvas_productos.create_window((0, 0), window=self.frame_lista, anchor="nw")
-
-        # Configurar los eventos para que el scroll crezca automáticamente según la cantidad de dulces
-        self.frame_lista.bind(
-            "<Configure>",
-            lambda e: self.canvas_productos.configure(scrollregion=self.canvas_productos.bbox("all"))
-        )
-        
-        # 6. Forzar que los dulces ocupen todo el ancho disponible del panel izquierdo
-        self.canvas_productos.bind(
-            "<Configure>",
-            lambda e: self.canvas_productos.itemconfig(self.canvas_window, width=e.width)
-        )
-        
+        self.frame_lista.bind("<Configure>", lambda e: self.canvas_productos.configure(scrollregion=self.canvas_productos.bbox("all")))
+        self.canvas_productos.bind("<Configure>", lambda e: self.canvas_productos.itemconfig(self.canvas_window, width=e.width))
         self.canvas_productos.bind("<Enter>", self._activar_scroll)
         self.canvas_productos.bind("<Leave>", self._desactivar_scroll)
 
-        # ====================================================
-        # PANEL DERECHO (Ticket de Venta)
-        # ====================================================
         panel_der = tk.Frame(contenedor_principal, bg="#F4F4F4", bd=1, relief="solid")
         panel_der.pack(side="right", fill="both", expand=True, padx=(10, 0))
 
@@ -68,254 +48,48 @@ class PanelVentas(tk.Frame):
 
         columnas = ("PRODUCTO", "CANTIDAD", "PRECIO")
         self.tabla_ticket = ttk.Treeview(panel_der, columns=columnas, show="headings", height=6)
-
         for col in columnas:
             self.tabla_ticket.heading(col, text=col)
-
-        self.tabla_ticket.column("PRODUCTO", width=140, anchor="w")
-        self.tabla_ticket.column("CANTIDAD", width=70, anchor="center")
-        self.tabla_ticket.column("PRECIO", width=70, anchor="center")
+            self.tabla_ticket.column(col, width=140, anchor="center")
         self.tabla_ticket.pack(fill="both", expand=True, padx=10)
 
         frame_total = tk.Frame(panel_der, bg="#F4F4F4")
         frame_total.pack(fill="x", padx=20, pady=15)
         tk.Label(frame_total, text="TOTAL", bg="#F4F4F4", font=("Arial", 12, "bold")).pack(side="left")
-        
         self.label_total = tk.Label(frame_total, text="$0.00", bg="#F4F4F4", font=("Arial", 12, "bold"))
         self.label_total.pack(side="right")
         
-        if self.modo_punto_venta:
-            tk.Button(
-                panel_der, text="CONTINUAR A COBROS Y PAGOS", bg="#F4D03F",
-                font=("Arial", 10, "bold"), relief="flat", command=self.ir_a_cobros
-            ).pack(fill="x", padx=15, pady=15)
-        else:
-            self._crear_controles_cobro(panel_der)
+        tk.Button(panel_der, text="CONTINUAR A COBROS Y PAGOS", bg="#F4D03F",
+                  font=("Arial", 10, "bold"), relief="flat", command=self.ir_a_cobros).pack(fill="x", padx=15, pady=15)
+            
+        tk.Button(panel_der, text="LIMPIAR CARRITO", bg="#D9534F", fg="white",
+                  font=("Arial", 9, "bold"), relief="flat", command=self.limpiar_carrito).pack(fill="x", padx=15, pady=(0, 15))
 
         self.refrescar_pantalla()
 
-        # --------------OPCIONES DE COBRO Y FACTURA-------------
-        self.metodo_pago = tk.StringVar(value="Efectivo")
-        self.tipo_tarjeta = tk.StringVar(value=CREDITO)
-        self.quiere_facturar = tk.BooleanVar(value=False)
+    def _programar_busqueda(self, event=None):
+        if self._id_busqueda is not None:
+            self.after_cancel(self._id_busqueda)
+        self._id_busqueda = self.after(MS_ESPERA_BUSQUEDA, self._aplicar_busqueda)
 
-        frame_opciones = tk.Frame(panel_der, bg="#F4F4F4")
-        frame_opciones.pack(fill="x", padx=20, pady=5)
-
-        # Métodos de pago
-        tk.Label(frame_opciones, text="Método de pago:", bg="#F4F4F4", font=("Arial", 9, "bold")).pack(anchor="w")
-        frame_radios = tk.Frame(frame_opciones, bg="#F4F4F4")
-        frame_radios.pack(anchor="w", pady=2)
-        
-        tk.Radiobutton(frame_radios, text="Efectivo", variable=self.metodo_pago, value="Efectivo",
-                       bg="#F4F4F4", command=self.toggle_metodo_pago).pack(side="left")
-        tk.Radiobutton(frame_radios, text="Tarjeta", variable=self.metodo_pago, value="Tarjeta", 
-                       bg="#F4F4F4", command=self.toggle_metodo_pago).pack(side="left")
-
-        # Sub-opciones de Tarjeta (Crédito / Débito) - Ocultas por defecto
-        self.frame_tipo_tarjeta = tk.Frame(frame_opciones, bg="#F4F4F4")
-        tk.Radiobutton(self.frame_tipo_tarjeta, text=CREDITO, variable=self.tipo_tarjeta, value=CREDITO, bg="#F4F4F4").pack(side="left", padx=(0, 10))
-        tk.Radiobutton(self.frame_tipo_tarjeta, text=DEBITO, variable=self.tipo_tarjeta, value=DEBITO, bg="#F4F4F4").pack(side="left")
-
-        # Opción si el cliente desea facturar
-        tk.Label(frame_opciones, text="¿El cliente requiere Factura?", bg="#F4F4F4", font=("Arial", 9, "bold")).pack(anchor="w", pady=(5,0))
-
-        frame_radios_fac = tk.Frame(frame_opciones, bg="#F4F4F4")
-        frame_radios_fac.pack(anchor="w")
-        tk.Radiobutton(frame_radios_fac, text="No", variable=self.quiere_facturar, value=False, bg="#F4F4F4", command=self.toggle_datos_factura).pack(side="left")
-        tk.Radiobutton(frame_radios_fac, text="Si", variable=self.quiere_facturar, value=True, bg="#F4F4F4", command=self.toggle_datos_factura).pack(side="left")
-
-        # BOTÓN DE COBRAR
-        frame_botones = tk.Frame(panel_der, bg="#F4F4F4")
-        frame_botones.pack(fill="x", padx=10, pady=10)
-        tk.Button(frame_botones, text="COBRAR", bg="#F4D03F", font=("Arial", 10, "bold"), relief="flat", command=self.procesar_cobro_principal).pack(side="right", expand=True, fill="x", padx=5)
-       
-        self.lbl_estado_factura = tk.Label(
-            frame_botones, 
-            text="", 
-            bg="#F4F4F4", 
-            fg="green", 
-            font=("Arial", 9, "bold")
-        )
-        self.lbl_estado_factura.pack(side="left", padx=5)
-
-        self.refrescar_pantalla()
-    
-    def _crear_controles_cobro(self, panel_der):
-        self.metodo_pago = tk.StringVar(value="Efectivo")
-        self.tipo_tarjeta = tk.StringVar(value="Crédito")
-        self.quiere_facturar = tk.BooleanVar(value=False)
-
-        frame_opciones = tk.Frame(panel_der, bg="#F4F4F4")
-        frame_opciones.pack(fill="x", padx=20, pady=5)
-
-        tk.Label(frame_opciones, text="Método de pago:", bg="#F4F4F4", font=("Arial", 9, "bold")).pack(anchor="w")
-        frame_radios = tk.Frame(frame_opciones, bg="#F4F4F4")
-        frame_radios.pack(anchor="w", pady=2)
-        
-        tk.Radiobutton(frame_radios, text="Efectivo", variable=self.metodo_pago, value="Efectivo", bg="#F4F4F4", command=self.toggle_metodo_pago).pack(side="left")
-        tk.Radiobutton(frame_radios, text="Tarjeta", variable=self.metodo_pago, value="Tarjeta", bg="#F4F4F4", command=self.toggle_metodo_pago).pack(side="left")
-
-        self.frame_tipo_tarjeta = tk.Frame(frame_opciones, bg="#F4F4F4")
-        tk.Radiobutton(self.frame_tipo_tarjeta, text=CREDITO, variable=self.tipo_tarjeta, value=CREDITO, bg="#F4F4F4").pack(side="left", padx=(0, 10))
-        tk.Radiobutton(self.frame_tipo_tarjeta, text=DEBITO, variable=self.tipo_tarjeta, value=DEBITO, bg="#F4F4F4").pack(side="left")
-
-        tk.Label(frame_opciones, text="¿El cliente requiere Factura?", bg="#F4F4F4", font=("Arial", 9, "bold")).pack(anchor="w", pady=(5,0))
-
-        frame_radios_fac = tk.Frame(frame_opciones, bg="#F4F4F4")
-        frame_radios_fac.pack(anchor="w")
-        tk.Radiobutton(frame_radios_fac, text="No", variable=self.quiere_facturar, value=False, bg="#F4F4F4", command=self.toggle_datos_factura).pack(side="left")
-        tk.Radiobutton(frame_radios_fac, text="Si", variable=self.quiere_facturar, value=True, bg="#F4F4F4", command=self.toggle_datos_factura).pack(side="left")
-
-        frame_botones = tk.Frame(panel_der, bg="#F4F4F4")
-        frame_botones.pack(fill="x", padx=10, pady=10)
-        tk.Button(frame_botones, text="COBRAR", bg="#F4D03F", font=("Arial", 10, "bold"), relief="flat", command=self.procesar_cobro_principal).pack(side="right", expand=True, fill="x", padx=5)
-       
-        self.lbl_estado_factura = tk.Label(frame_botones, text="", bg="#F4F4F4", fg="green", font=("Arial", 9, "bold"))
-        self.lbl_estado_factura.pack(side="left", padx=5)
-
-
-    # FUNCIÓN PARA MOSTRAR/OCULTAR TIPO DE TARJETA
-    def toggle_metodo_pago(self):
-        if self.metodo_pago.get() == "Tarjeta":
-            self.frame_tipo_tarjeta.pack(anchor="w", pady=2)
-        else:
-            self.frame_tipo_tarjeta.pack_forget()
-
-    # FUNCIÓN QUE DETECTA CUANDO SE ELIGE FACTURAR PARA ABRIR LA VENTANA EMERGENTE
-    def toggle_datos_factura(self):
-        if self.quiere_facturar.get():
-            self.abrir_ventana_factura()
-
-    def intentar_agregar(self, nombre_producto):
-        self.controlador.procesar_agregar(nombre_producto)
-        self.refrescar_pantalla()
-
-    def abrir_ventana_factura(self):
-        modal_fac = tk.Toplevel(self)
-        modal_fac.title("Datos de Facturación")
-        ancho_ventana = 380
-        alto_ventana = 350
-        
-        # Obtenemos el tamaño de la pantalla del usuario
-        ancho_pantalla = modal_fac.winfo_screenwidth()
-        alto_pantalla = modal_fac.winfo_screenheight()
-        
-        x = (ancho_pantalla // 2) - (ancho_ventana // 2)
-        y = (alto_pantalla // 2) - (alto_ventana // 2)    
-        modal_fac.geometry(f"{ancho_ventana}x{alto_ventana}+{x}+{y}")
- 
-        
-        modal_fac.config(bg=estilos.FONDO)
-        modal_fac.grab_set()
-
-        _, _, total_actual = self.controlador.obtener_datos_ventas()
-
-        tk.Label(modal_fac, text="SOLICITUD DE FACTURA", bg=estilos.FONDO, font=("Arial", 11, "bold")).pack(pady=10)
-        tk.Label(modal_fac, text=f"Total a Facturar: ${total_actual:.2f}", bg=estilos.FONDO, fg="#3A8D96", font=("Arial", 10, "bold")).pack(pady=5)
-
-        frame_campos = tk.Frame(modal_fac, bg=estilos.FONDO)
-        frame_campos.pack(pady=10)
-
-        tk.Label(frame_campos, text="Nombre(s):", bg=estilos.FONDO).grid(row=0, column=0, sticky="e", pady=4)
-        entry_nombre = tk.Entry(frame_campos, width=22)
-        entry_nombre.grid(row=0, column=1, pady=4, padx=5)
-
-        tk.Label(frame_campos, text="Apellidos:", bg=estilos.FONDO).grid(row=1, column=0, sticky="e", pady=4)
-        entry_apellidos = tk.Entry(frame_campos, width=22)
-        entry_apellidos.grid(row=1, column=1, pady=4, padx=5)
-
-        tk.Label(frame_campos, text="Correo:", bg=estilos.FONDO).grid(row=2, column=0, sticky="e", pady=4)
-        entry_correo = tk.Entry(frame_campos, width=22)
-        entry_correo.grid(row=2, column=1, pady=4, padx=5)
-
-        tk.Label(frame_campos, text="RFC:", bg=estilos.FONDO).grid(row=3, column=0, sticky="e", pady=4)
-        entry_rfc = tk.Entry(frame_campos, width=22)
-        entry_rfc.grid(row=3, column=1, pady=4, padx=5)
-
-        def guardar_y_cerrar():
-            if not entry_nombre.get() or not entry_rfc.get():
-                messagebox.showwarning("Campos vacíos", "Por favor ingresa al menos el Nombre y el RFC.", parent=modal_fac)
-                return
-            
-            # Guardamos los datos temporalmente en la instancia de la clase
-            self.factura_nombre = entry_nombre.get()
-            self.factura_apellidos = entry_apellidos.get()
-            self.factura_correo = entry_correo.get()
-            self.factura_rfc = entry_rfc.get()
-
-            messagebox.showinfo("Éxito", "Datos de factura guardados correctamente.", parent=modal_fac)
-            modal_fac.destroy()
-
-        tk.Button(modal_fac, text="GUARDAR DATOS", bg="#F4D03F", font=("Arial", 9, "bold"), relief="flat", command=guardar_y_cerrar).pack(pady=10)
-        
-        def al_cerrar():
-            self.quiere_facturar.set(False)
-            modal_fac.destroy()
-        
-        modal_fac.protocol("WM_DELETE_WINDOW", al_cerrar)
-
-    # FUNCIÓN QUE EJECUTA EL COBRO DESDE LA PANTALLA PRINCIPAL
-    def procesar_cobro_principal(self):
-        metodo = self.metodo_pago.get()
-        detalle_pago = f"{metodo} ({self.tipo_tarjeta.get()})" if metodo == "Tarjeta" else metodo
-
-        # Validar si el carrito está vacío antes de cobrar
-        _, carrito, _ = self.controlador.obtener_datos_ventas()
-        if not carrito:
-            messagebox.showwarning("Ticket Vacío", "No hay productos en el ticket para cobrar.")
-            return
-
-        # Recopilar datos de factura si se seleccionaron
-        datos_factura = None
-        if self.quiere_facturar.get():
-            datos_factura = {
-                "requiere": True,
-                "nombre": getattr(self, "factura_nombre", ""),
-                "apellidos": getattr(self, "factura_apellidos", ""),
-                "correo": getattr(self, "factura_correo", ""),
-                "rfc": getattr(self, "factura_rfc", "")
-            }
-
-        self.controlador.procesar_cobro_avanzado(detalle_pago, datos_factura)
-        self.quiere_facturar.set(False)
-
-        # Si el pago es con tarjeta, mostramos la ventana emergente de cobro realizado
-        if metodo == "Tarjeta":
-
-            modal_cobro = tk.Toplevel(self)
-            modal_cobro.title("Cobro con Tarjeta")
-            ancho_ventana = 300
-            alto_ventana = 180
-            
-            ancho_pantalla = modal_cobro.winfo_screenwidth()
-            alto_pantalla = modal_cobro.winfo_screenheight()
-            
-            x = (ancho_pantalla // 2) - (ancho_ventana // 2)
-            y = (alto_pantalla // 2) - (alto_ventana // 2)
-            
-            modal_cobro.geometry(f"{ancho_ventana}x{alto_ventana}+{x}+{y}")
-            
-            modal_cobro.config(bg=estilos.FONDO)
-            modal_cobro.grab_set()
-
-            tk.Label(modal_cobro, text="¡COBRO REALIZADO CON ÉXITO!", bg=estilos.FONDO, fg="green", font=("Arial", 10, "bold")).pack(pady=20)
-            tk.Label(modal_cobro, text=f"Método: {detalle_pago}", bg=estilos.FONDO, font=("Arial", 9)).pack(pady=5)
-
-            def aceptar_cobro():
-                modal_cobro.destroy()
-                # Refrescamos la pantalla para que dibuje el ticket vacío que el controlador ya limpió
-                self.refrescar_pantalla()
-
-            tk.Button(modal_cobro, text="ACEPTAR", bg="#F4D03F", font=("Arial", 9, "bold"), relief="flat", command=aceptar_cobro).pack(pady=15)
-        else:
-            self.refrescar_pantalla()
+    def _aplicar_busqueda(self):
+        self._id_busqueda = None
+        productos, _, _ = self.controlador.obtener_datos_ventas()
+        self.dibujar_catalogo(productos)
+        self.canvas_productos.yview_moveto(0)
 
     def dibujar_catalogo(self, productos_disponibles):
+        texto = self.txt_buscar_venta.get().strip().lower()
+        if texto:
+            productos_disponibles = [
+                p for p in productos_disponibles
+                if texto in p["nombre"].lower() or texto in (p.get("marca") or "").lower()
+            ]
+        
         for widget in self.frame_lista.winfo_children():
             widget.destroy()
 
-        for producto in productos_disponibles:
+        for producto in productos_disponibles[:MAX_TARJETAS]:
             item = tk.Frame(self.frame_lista, bg=estilos.BLANCO, pady=8, padx=10, bd=1, relief="solid")
             item.pack(fill="x", pady=2, padx=2)
 
@@ -328,42 +102,34 @@ class PanelVentas(tk.Frame):
             btn_agregar.grid(row=0, column=2, rowspan=2, sticky="e", padx=5)
             item.grid_columnconfigure(2, weight=1)
 
+    def intentar_agregar(self, nombre_producto):
+        self.controlador.procesar_agregar(nombre_producto)
+        _, carrito, total = self.controlador.obtener_datos_ventas()
+        self.dibujar_ticket(carrito, total)
+
     def dibujar_ticket(self, carrito, total):
         for fila in self.tabla_ticket.get_children():
             self.tabla_ticket.delete(fila)
-
         for item in carrito:
             self.tabla_ticket.insert("", "end", values=(item["producto"], item["cantidad"], f"${item['subtotal']:.2f}"))
-
         self.label_total.config(text=f"${total:.2f}")
 
     def refrescar_pantalla(self):
         productos, carrito, total = self.controlador.obtener_datos_ventas()
         self.dibujar_catalogo(productos)
         self.dibujar_ticket(carrito, total)
-        self.bind("<Destroy>", self._al_destruir)
 
-    def _al_destruir(self, event=None):
-        """Limpia el binding global si el panel se destruye (cambio de pestaña)."""
-        if event is None or event.widget is self:
-            try:
-                self.canvas_productos.unbind_all(EVENTO_RUEDA)
-            except tk.TclError:
-                pass
-     
+    def limpiar_carrito(self):
+        if messagebox.askyesno("Limpiar Carrito", "¿Estás seguro de vaciar el carrito actual? (Aún no se ha cobrado)"):
+            self.controlador.vaciar_ticket_actual()
+            self.refrescar_pantalla()
+
     def _activar_scroll(self, event=None):
-        """Activa la rueda del mouse solo cuando el cursor entra al canvas."""
-        self.canvas_productos.bind_all(EVENTO_RUEDA, self._on_mousewheel)
+        self.canvas_productos.bind_all("<MouseWheel>", self._on_mousewheel)
 
     def _desactivar_scroll(self, event=None):
-        """Desactiva la rueda al salir, evitando errores cuando el panel se destruye."""
-        self.canvas_productos.unbind_all(EVENTO_RUEDA)
-
+        self.canvas_productos.unbind_all("<MouseWheel>")
 
     def _on_mousewheel(self, event):
-        if not self.canvas_productos.winfo_exists():
-            return
-        self.canvas_productos.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-    def actualizar_estado_factura(self, mensaje, color="green"):
-        self.lbl_estado_factura.config(text=mensaje, fg=color)
+        if self.canvas_productos.winfo_exists():
+            self.canvas_productos.yview_scroll(int(-1 * (event.delta / 120)), "units")

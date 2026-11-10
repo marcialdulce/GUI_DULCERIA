@@ -1,5 +1,5 @@
 """
-Genera un archivo MASIVO de ventas de prueba en datos/ventas.jsonl.
+Genera ventas de prueba MASIVAS directamente en MySQL (dulceria_db).
 
 Uso (desde la carpeta del proyecto, con la aplicación cerrada):
 
@@ -7,11 +7,11 @@ Uso (desde la carpeta del proyecto, con la aplicación cerrada):
     python generar_ventas_demo.py 5000         # más ventas
     python generar_ventas_demo.py 500 --reemplazar
 
-Por defecto AGREGA al final del archivo existente. Con --reemplazar lo borra
-primero (útil para volver a empezar).
+Por defecto AGREGA ventas a las existentes. Con --reemplazar borra primero las ventas
+(y sus detalles) para volver a empezar. Las ventas demo NO descuentan stock.
+Requisito: los 11 productos de CATALOGO deben existir en PRODUCTOS (los trae 02_dulceria_datos_base.sql).
 """
 import argparse
-import os
 import random
 import time
 from datetime import datetime, timedelta
@@ -32,28 +32,33 @@ LOTE = 5000
 
 def generar(cantidad, reemplazar=False, semilla=None):
     repo = RepositorioVentas()
-    if reemplazar and os.path.exists(repo.ruta):
-        os.remove(repo.ruta)
+    if reemplazar:
+        con = repo.conexion_bd.conectar()
+        cur = con.cursor()
+        cur.execute("DELETE FROM FACTURA")          # primero los hijos (llaves foráneas)
+        cur.execute("DELETE FROM DETALLES_VENTAS")
+        cur.execute("DELETE FROM VENTAS")
+        con.commit(); con.close()
 
-    rnd = random.Random(semilla)
+    rnd = random.Random(semilla)  
     fin = datetime.now()
     inicio = fin - timedelta(days=365)
-    paso = (fin - inicio) / cantidad          # fechas crecientes, como en la vida real
+    paso = (fin - inicio) / cantidad          
 
     lote = []
     t0 = time.perf_counter()
     for i in range(cantidad):
-        elegidos = rnd.sample(CATALOGO, rnd.randint(1, 4))
+        elegidos = rnd.sample(CATALOGO, rnd.randint(1, 4))  # NOSONAR
         articulos = []
         for nombre, precio in elegidos:
-            cant = rnd.randint(1, 5)
+            cant = rnd.randint(1, 5)  # NOSONAR
             articulos.append({"producto": nombre, "cantidad": cant,
                               "subtotal": round(precio * cant, 2)})
         lote.append({
-            "folio": f"D{i:07d}",
+            "folio": f"D{i:07d}" if reemplazar else f"D{int(time.time()) % 10**6:06d}{i:05d}",  # único aunque se agregue
             "fecha": (inicio + paso * i).strftime(FORMATO_FECHA),
-            "metodo_pago": rnd.choices(METODOS, PESOS_METODOS)[0],
-            "facturado": rnd.random() < 0.05,
+            "metodo_pago": rnd.choices(METODOS, PESOS_METODOS)[0],  # NOSONAR
+            "facturado": rnd.random() < 0.05,  # NOSONAR
             "total": round(sum(a["subtotal"] for a in articulos), 2),
             "articulos": articulos,
         })
@@ -64,9 +69,8 @@ def generar(cantidad, reemplazar=False, semilla=None):
     if lote:
         repo.registrar_lote(lote)
 
-    mb = os.path.getsize(repo.ruta) / 1_048_576
     print(f"\rListo: {cantidad:,} ventas agregadas en {time.perf_counter() - t0:.1f} s "
-          f"-> {repo.ruta} ({mb:.1f} MB)")
+          f"-> tabla VENTAS de MySQL ({repo.tamano_actual():,} ventas en total)")
 
 
 if __name__ == "__main__":
