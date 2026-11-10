@@ -11,6 +11,7 @@ from vistas.panel_historial import PanelHistorial
 from vistas.panel_proveedores import PanelProveedores
 from vistas.panel_cierre_caja import PanelCierreCaja
 from vistas.header import LogoDulceriaHeader
+from vistas.panel_reportes import PanelReportes
 
 class MenuPrincipal(tk.Frame):
     def __init__(self, parent, controlador):
@@ -81,7 +82,8 @@ class MenuPrincipal(tk.Frame):
             "HISTORIAL": lambda: PanelHistorial(self.contenido, self.controlador),
             "HISTORIAL DE VENTAS": lambda: PanelHistorial(self.contenido, self.controlador),
             "TICKETS": lambda: PanelTickets(self.contenido, self.controlador),
-            "CIERRE DE CAJA": lambda: PanelCierreCaja(self.contenido, self.controlador)
+            "CIERRE DE CAJA": lambda: PanelCierreCaja(self.contenido, self.controlador),
+            "REPORTES": lambda: __import__('vistas.panel_reportes', fromlist=['PanelReportes']).PanelReportes(self.contenido, self.controlador)
         }
 
         generador_panel = paneles.get(opcion)

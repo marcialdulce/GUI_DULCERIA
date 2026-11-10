@@ -6,118 +6,118 @@ class PanelApartados(tk.Frame):
     def __init__(self, parent, controlador):
         super().__init__(parent, bg="#F9F4F0")
         self.controlador = controlador
+        self.carrito = [] # Carrito local
 
-        titulo = tk.Frame(self, bg="#2D929A", height=35)
-        titulo.pack(fill="x", side="top")
-        titulo.pack_propagate(False)
-        tk.Label(titulo, text="CONTROL DE APARTADOS", bg="#2D929A", fg="white", font=("Arial", 11, "bold")).pack(side="left", padx=15)
-
-        frame_botones = tk.Frame(self, bg="#F9F4F0")
-        frame_botones.pack(fill="x", padx=15, pady=10)
+        tk.Label(self, text="CONTROL DE APARTADOS", bg="#2D929A", fg="white", font=("Arial", 11, "bold")).pack(fill="x", padx=15, pady=5)
         
-        tk.Button(frame_botones, text="+ NUEVO APARTADO", bg="#27AE60", fg="white", 
-                  font=("Arial", 9, "bold"), command=self.abrir_nuevo_apartado).pack(side="left")
-        tk.Button(frame_botones, text="❌ CANCELAR APARTADO SELECCIONADO", bg="#C0392B", fg="white", 
-                  font=("Arial", 9, "bold"), command=self.cancelar_apartado).pack(side="right")
+        frame_btns = tk.Frame(self, bg="#F9F4F0")
+        frame_btns.pack(fill="x", padx=15, pady=5)
+        tk.Button(frame_btns, text="+ NUEVO APARTADO", bg="#27AE60", fg="white", command=self.abrir_nuevo_apartado).pack(side="left")
+        tk.Button(frame_btns, text=" LIQUIDAR SELECCIONADO", bg="#2980B9", fg="white", command=self.liquidar_apartado).pack(side="left", padx=10)
+        tk.Button(frame_btns, text=" CANCELAR", bg="#C0392B", fg="white", command=self.cancelar_apartado).pack(side="right")
 
-        frame_tabla = tk.Frame(self, bg="#F9F4F0")
-        frame_tabla.pack(fill="both", expand=True, padx=15, pady=10)
-        
-        cols = ("ID", "CLIENTE", "PRODUCTO", "UNIDADES", "FECHA ENTREGA", "ESTADO")
-        self.tabla = ttk.Treeview(frame_tabla, columns=cols, show="headings")
-        for c in cols:
-            self.tabla.heading(c, text=c)
-            self.tabla.column(c, anchor="center", width=120)
-        self.tabla.pack(fill="both", expand=True)
+        self.tabla = ttk.Treeview(self, columns=("SEL", "ID", "CLIENTE", "PRODUCTO", "FECHA", "TOTAL", "PAGADO", "ESTADO"), show="headings")
+        self.tabla.heading("SEL", text="[ ]"); self.tabla.column("SEL", width=40, anchor="center")
+        self.tabla.heading("ID", text="ID")
+        self.tabla.heading("CLIENTE", text="CLIENTE")
+        self.tabla.heading("PRODUCTO", text="PRODUCTO")
+        self.tabla.heading("FECHA", text="ENTREGA")
+        self.tabla.heading("TOTAL", text="TOTAL")
+        self.tabla.heading("PAGADO", text="PAGADO")
+        self.tabla.heading("ESTADO", text="ESTADO")
+        for c in ("ID","CLIENTE","PRODUCTO","FECHA","TOTAL","PAGADO","ESTADO"): self.tabla.column(c, anchor="center", width=100)
+        self.tabla.pack(fill="both", expand=True, padx=15, pady=5)
+        self.tabla.bind("<ButtonRelease-1>", self.toggle_sel)
         
         self.cargar_tabla()
 
+    def toggle_sel(self, event):
+        item = self.tabla.identify_row(event.y)
+        if item:
+            vals = list(self.tabla.item(item, "values"))
+            vals[0] = "☑" if vals[0] == "☐" else "☐"
+            self.tabla.item(item, values=vals)
+
     def cargar_tabla(self):
-        for row in self.tabla.get_children():
-            self.tabla.delete(row)
+        for row in self.tabla.get_children(): self.tabla.delete(row)
         for item in self.controlador.obtener_lista_apartados():
             self.tabla.insert("", "end", values=(
-                item["id_apartado"], item["nombre"], item["producto"], 
-                item["unidades"], item["fecha"], item["estado"]
+                "☐", item["id_apartado"], item["nombre"], item["producto"], item["fecha"], 
+                f"${float(item['subtotal'])+float(item['impuesto']):.2f}", 
+                f"${float(item['pagado']):.2f}", item["estado"]
             ))
 
+    def liquidar_apartado(self):
+        sel = [self.tabla.item(i)["values"] for i in self.tabla.get_children() if self.tabla.item(i)["values"][0] == "☑"]
+        if not sel: return messagebox.showwarning("Aviso", "Marca un apartado.")
+        
+        item = sel[0]
+        if item[7] == "liquidado": return messagebox.showinfo("Info", "Ya está liquidado.")
+        
+        total = float(item[5].replace('$',''))
+        pagado = float(item[6].replace('$',''))
+        saldo = total - pagado
+
+        # Pago simple para saldo (Podría ser mixto, pero simplificamos a 1 método)
+        pago = tk.simpledialog.askfloat("Liquidar", f"Saldo pendiente: ${saldo:.2f}\n¿Con cuánto paga el cliente?")
+        if pago and pago >= saldo:
+            if self.controlador.liquidar_apartado(item[1], [{"monto": pago, "id_metodo_pago": 1}]):
+                messagebox.showinfo("Éxito", f"Liquidado. Cambio: ${pago - saldo:.2f}")
+                self.cargar_tabla()
+
     def cancelar_apartado(self):
-        sel = self.tabla.selection()
-        if not sel:
-            messagebox.showwarning("Selección", "Selecciona un apartado de la tabla.")
-            return
-        
-        # FIX: Extraer el primer elemento de la tupla
-        item = self.tabla.item(sel[0])
-        id_apartado = item["values"][0]
-        estado = item["values"][5]
-
-        if estado == "cancelado":
-            messagebox.showinfo("Info", "Este apartado ya está cancelado.")
-            return
-
-        confirmacion = messagebox.askyesno(
-            "Cancelar Apartado - Política Estricta", 
-            " ADVERTENCIA:\n\nPor políticas de la dulcería, si cancelas este apartado, el anticipo entregado NO ES REEMBOLSABLE bajo ninguna circunstancia.\n\n¿Deseas continuar con la cancelación?"
-        )
-        
-        if confirmacion:
-            self.controlador.cancelar_apartado(id_apartado)
-            messagebox.showinfo("Cancelado", "El apartado ha sido cancelado y el anticipo retenido.")
+        sel = [self.tabla.item(i)["values"] for i in self.tabla.get_children() if self.tabla.item(i)["values"][0] == "☑"]
+        if not sel: return
+        if messagebox.askyesno("Cancelar", "El anticipo NO es reembolsable. ¿Continuar?"):
+            self.controlador.cancelar_apartado(sel[0][1])
             self.cargar_tabla()
 
     def abrir_nuevo_apartado(self):
         modal = tk.Toplevel(self)
-        modal.title("Registrar Nuevo Apartado")
-        
-        # Centrar ventana
-        ancho, alto = 400, 520
-        x = (modal.winfo_screenwidth() // 2) - (ancho // 2)
-        y = (modal.winfo_screenheight() // 2) - (alto // 2)
-        modal.geometry(f"{ancho}x{alto}+{x}+{y}")
-        
-        modal.config(bg="#F9F4F0")
+        modal.geometry("450x550")
+        modal.title("Nuevo Apartado (Carrito)")
         modal.grab_set()
+        self.carrito.clear()
 
-        tk.Label(modal, text="NOMBRE DEL CLIENTE:", bg="#F9F4F0").pack(pady=(15, 5))
-        entry_nombre = tk.Entry(modal, width=30)
-        entry_nombre.pack()
+        tk.Label(modal, text="Nombre:").pack(); e_nombre = tk.Entry(modal); e_nombre.pack()
+        tk.Label(modal, text="Teléfono:").pack(); e_tel = tk.Entry(modal); e_tel.pack()
+        tk.Label(modal, text="Fecha (AAAA-MM-DD):").pack(); e_fecha = tk.Entry(modal); e_fecha.insert(0, datetime.now().strftime("%Y-%m-%d")); e_fecha.pack()
 
-        tk.Label(modal, text="TELÉFONO:", bg="#F9F4F0").pack(pady=5)
-        entry_tel = tk.Entry(modal, width=30)
-        entry_tel.pack()
+        frame_add = tk.Frame(modal); frame_add.pack(pady=10)
+        cmb_prods = ttk.Combobox(frame_add, values=self.controlador.obtener_nombres_productos(), state="readonly", width=20)
+        cmb_prods.pack(side="left", padx=5)
+        e_cant = tk.Entry(frame_add, width=5); e_cant.pack(side="left")
 
-        tk.Label(modal, text="FECHA DE ENTREGA (AAAA-MM-DD):", bg="#F9F4F0").pack(pady=5)
-        entry_fecha = tk.Entry(modal, width=30)
-        entry_fecha.insert(0, datetime.now().strftime("%Y-%m-%d"))
-        entry_fecha.pack()
+        tabla_c = ttk.Treeview(modal, columns=("PROD", "CANT"), show="headings", height=5)
+        tabla_c.heading("PROD", text="Producto"); tabla_c.heading("CANT", text="Cant")
+        tabla_c.pack(fill="x", padx=20, pady=10)
 
-        tk.Label(modal, text="PRODUCTO (Solo con stock):", bg="#F9F4F0").pack(pady=5)
-        productos = self.controlador.obtener_nombres_productos()
-        combo_prod = ttk.Combobox(modal, values=productos, width=28, state="readonly")
-        combo_prod.pack()
+        def agregar():
+            prod = next((p for p in self.controlador.modelo.inventario if p["nombre"] == cmb_prods.get()), None)
+            if prod:
+                cant = int(e_cant.get())
+                self.carrito.append({"id_producto": prod["id_producto"], "nombre": prod["nombre"], "precio_unitario": prod["precio"], "cantidad": cant})
+                tabla_c.insert("", "end", values=(prod["nombre"], cant))
+        
+        tk.Button(frame_add, text="+", command=agregar).pack(side="left")
 
-        tk.Label(modal, text="CANTIDAD:", bg="#F9F4F0").pack(pady=5)
-        entry_cant = tk.Entry(modal, width=30)
-        entry_cant.pack()
-
-        tk.Label(modal, text="MÉTODO DE PAGO DEL ANTICIPO:", bg="#F9F4F0").pack(pady=5)
-        combo_metodo = ttk.Combobox(modal, values=["Efectivo", "Tarjeta de débito", "Tarjeta de crédito"], width=28, state="readonly")
-        combo_metodo.current(0)
-        combo_metodo.pack()
-
-        tk.Label(modal, text="(El sistema cobrará un anticipo del 50% obligatorio)", fg="red", bg="#F9F4F0", font=("Arial", 9, "italic")).pack(pady=15)
+        tk.Label(modal, text="Método Pago Anticipo (50%):").pack()
+        cmb_metodo = ttk.Combobox(modal, values=["Efectivo", "Tarjeta de débito", "Tarjeta de crédito"], state="readonly")
+        cmb_metodo.current(0); cmb_metodo.pack()
 
         def guardar():
-            exito, mensaje = self.controlador.registrar_apartado(
-                entry_nombre.get().strip(), entry_tel.get().strip(), entry_fecha.get().strip(),
-                combo_prod.get(), entry_cant.get(), combo_metodo.get()
+            total = sum(a["precio_unitario"] * a["cantidad"] for a in self.carrito)
+            anticipo = round(total * 0.50, 2)
+            id_metodo = 1 if cmb_metodo.get() == "Efectivo" else (2 if cmb_metodo.get() == "Tarjeta de débito" else 3)
+            
+            ok, msg = self.controlador.registrar_apartado(
+                e_nombre.get(), e_tel.get(), e_fecha.get(), self.carrito, 
+                [{"monto": anticipo, "id_metodo_pago": id_metodo}]
             )
-            if exito:
-                messagebox.showinfo("Éxito", mensaje)
-                modal.destroy()
-                self.cargar_tabla()
-            else:
-                messagebox.showerror("Error", mensaje)
+            if ok:
+                messagebox.showinfo("Éxito", f"Guardado. Cobrar anticipo: ${anticipo:.2f}")
+                modal.destroy(); self.cargar_tabla()
+            else: messagebox.showerror("Error", msg)
 
-        tk.Button(modal, text="COBRAR ANTICIPO Y GUARDAR", bg="#27AE60", fg="white", font=("Arial", 10, "bold"), command=guardar).pack(pady=15)
+        tk.Button(modal, text="REGISTRAR APARTADO", bg="#27AE60", fg="white", command=guardar).pack(pady=15)
+        

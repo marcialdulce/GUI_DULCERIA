@@ -6,70 +6,97 @@ class PanelProveedores(tk.Frame):
     def __init__(self, parent, controlador):
         super().__init__(parent, bg=estilos.FONDO)
         self.controlador = controlador
+        self.carrito_pedido = []
 
-        frame_titulo = tk.Frame(self, bg="#3A8D96", height=40)
-        frame_titulo.pack(fill="x")
-        frame_titulo.pack_propagate(False)
-        tk.Label(frame_titulo, text="  GESTIÓN DE PROVEEDORES", bg="#3A8D96", fg="white", font=("Arial", 11, "bold")).pack(side="left", padx=10)
-
-        form = tk.Frame(self, bg=estilos.FONDO)
-        form.pack(pady=15)
-
-        tk.Label(form, text="Nombre:", bg=estilos.FONDO).grid(row=0, column=0, padx=5)
-        self.entry_nombre = tk.Entry(form, width=25)
-        self.entry_nombre.grid(row=0, column=1, padx=5)
-
-        tk.Label(form, text="Teléfono:", bg=estilos.FONDO).grid(row=0, column=2, padx=5)
-        self.entry_tel = tk.Entry(form, width=15)
-        self.entry_tel.grid(row=0, column=3, padx=5)
-
-        tk.Label(form, text="Correo:", bg=estilos.FONDO).grid(row=0, column=4, padx=5)
-        self.entry_correo = tk.Entry(form, width=25)
-        self.entry_correo.grid(row=0, column=5, padx=5)
-
-        tk.Button(form, text="AGREGAR", bg="#27AE60", fg="white", font=("Arial", 9, "bold"), command=self.agregar).grid(row=0, column=6, padx=10)
+        tk.Label(self, text="GESTIÓN DE PROVEEDORES Y PEDIDOS", bg="#3A8D96", fg="white", font=("Arial", 11, "bold")).pack(fill="x", pady=5)
+        
+        frame_btns = tk.Frame(self, bg=estilos.FONDO); frame_btns.pack(pady=10)
+        tk.Button(frame_btns, text="+ NUEVO PEDIDO MANUAL", bg="#27AE60", fg="white", command=self.nuevo_pedido).pack(side="left", padx=10)
+        tk.Button(frame_btns, text=" VER PEDIDOS ACTIVOS", bg="#2980B9", fg="white", command=self.ver_pedidos).pack(side="left")
 
         cols = ("ID", "NOMBRE", "TELÉFONO", "CORREO")
-        self.tabla = ttk.Treeview(self, columns=cols, show="headings", height=14)
-        for c in cols:
-            self.tabla.heading(c, text=c)
-            self.tabla.column(c, anchor="center", width=180)
+        self.tabla = ttk.Treeview(self, columns=cols, show="headings", height=15)
+        for c in cols: self.tabla.heading(c, text=c); self.tabla.column(c, anchor="center", width=150)
         self.tabla.pack(fill="both", expand=True, padx=20, pady=10)
-
-        tk.Button(self, text=" Eliminar seleccionado", bg="#C0392B", fg="white", font=("Arial", 9, "bold"), command=self.eliminar).pack(pady=10)
         self.refrescar()
 
     def refrescar(self):
-        for row in self.tabla.get_children():
-            self.tabla.delete(row)
+        for row in self.tabla.get_children(): self.tabla.delete(row)
+        # Aquí usamos p.get() por si algún proveedor no tiene teléfono o correo en la BD
         for p in self.controlador.obtener_proveedores():
-            self.tabla.insert("", "end", values=(p["id"], p["nombre"], p["telefono"], p["correo"]))
+            self.tabla.insert("", "end", values=(p["id"], p["nombre"], p.get("telefono", ""), p.get("correo", "")))
 
-    def agregar(self):
-        ok, msg = self.controlador.procesar_nuevo_proveedor(self.entry_nombre.get(), self.entry_tel.get(), self.entry_correo.get())
-        if ok:
-            messagebox.showinfo("Éxito", msg)
-            self.entry_nombre.delete(0, "end")
-            self.entry_tel.delete(0, "end")
-            self.entry_correo.delete(0, "end")
-            self.refrescar()
-        else:
-            messagebox.showerror("Error", msg)
+    def nuevo_pedido(self):
+        modal = tk.Toplevel(self)
+        modal.geometry("500x600")
+        modal.title("Crear Pedido a Proveedor")
+        modal.grab_set()
+        self.carrito_pedido.clear()
 
-    def eliminar(self):
-        sel = self.tabla.selection()
-        if not sel:
-            messagebox.showwarning("Selección", "Selecciona un proveedor de la tabla.")
-            return
-        
-        # FIX: Extraer el primer elemento de la tupla de selección
-        item = self.tabla.item(sel[0])
-        id_prov = item["values"][0]
-        nombre  = item["values"][1]
+        tk.Label(modal, text="Proveedor:").pack()
+        cmb_prov = ttk.Combobox(modal, values=[p["nombre"] for p in self.controlador.obtener_proveedores()], state="readonly")
+        cmb_prov.pack()
 
-        if not messagebox.askyesno("Confirmar", f"¿Eliminar al proveedor '{nombre}'?\nLos productos asociados quedarán sin proveedor."):
-            return
+        frame_add = tk.Frame(modal); frame_add.pack(pady=10)
+        cmb_prods = ttk.Combobox(frame_add, state="readonly", width=25); cmb_prods.pack(side="left")
+        e_cant = tk.Entry(frame_add, width=5); e_cant.pack(side="left")
+        e_costo = tk.Entry(frame_add, width=8); e_costo.pack(side="left")
+        e_costo.insert(0, "Costo $")
 
-        self.controlador.procesar_eliminar_proveedor(id_prov)
-        messagebox.showinfo("Éxito", f"Proveedor '{nombre}' eliminado.")
-        self.refrescar()
+        tabla = ttk.Treeview(modal, columns=("PROD", "CANT", "COSTO"), show="headings", height=8)
+        for c in ("PROD", "CANT", "COSTO"): tabla.heading(c, text=c)
+        tabla.pack(fill="x", padx=20, pady=10)
+
+        def cargar_prods(event):
+            prov = next((p for p in self.controlador.obtener_proveedores() if p["nombre"] == cmb_prov.get()), None)
+            if prov:
+                prods = self.controlador.obtener_productos_proveedor(prov["id"])
+                cmb_prods["values"] = [p["nombre"] for p in prods]
+
+        cmb_prov.bind("<<ComboboxSelected>>", cargar_prods)
+
+        def agregar():
+            prod_nombre = cmb_prods.get()
+            prov = next((p for p in self.controlador.obtener_proveedores() if p["nombre"] == cmb_prov.get()), None)
+            prods = self.controlador.obtener_productos_proveedor(prov["id"])
+            prod = next((p for p in prods if p["nombre"] == prod_nombre), None)
+            
+            if prod:
+                cant = int(e_cant.get())
+                costo = float(e_costo.get())
+                self.carrito_pedido.append({"id_producto": prod["id_producto"], "cantidad": cant, "costo_unitario": costo})
+                tabla.insert("", "end", values=(prod_nombre, cant, f"${costo:.2f}"))
+
+        tk.Button(frame_add, text="+", command=agregar).pack(side="left")
+
+        def guardar():
+            prov = next((p for p in self.controlador.obtener_proveedores() if p["nombre"] == cmb_prov.get()), None)
+            if prov and self.carrito_pedido:
+                if self.controlador.crear_pedido_manual(prov["id"], self.carrito_pedido):
+                    messagebox.showinfo("Éxito", "Pedido enviado al proveedor.")
+                    modal.destroy()
+                else: messagebox.showerror("Error", "No se pudo guardar.")
+
+        tk.Button(modal, text="GUARDAR PEDIDO", bg="#27AE60", fg="white", command=guardar).pack(pady=15)
+
+    def ver_pedidos(self):
+        modal = tk.Toplevel(self)
+        modal.geometry("600x400")
+        modal.title("Pedidos Activos")
+
+        tabla = ttk.Treeview(modal, columns=("ID", "PROD", "CANT", "TOTAL"), show="headings")
+        for c in ("ID", "PROD", "CANT", "TOTAL"): tabla.heading(c, text=c)
+        tabla.pack(fill="both", expand=True, padx=10, pady=10)
+
+        for p in self.controlador.obtener_pedidos_activos():
+            tabla.insert("", "end", values=(p["id_pedido"], p["producto"], p["cantidad"], f"${float(p['subtotal']):.2f}"))
+
+        def recibir():
+            sel = tabla.selection()
+            if sel:
+                id_p = tabla.item(sel[0])["values"][0]
+                if self.controlador.recibir_pedido(id_p):
+                    messagebox.showinfo("Éxito", "Mercancía recibida y stock actualizado.")
+                    modal.destroy()
+
+        tk.Button(modal, text="RECIBIR MERCANCÍA", bg="#27AE60", fg="white", command=recibir).pack(pady=10)

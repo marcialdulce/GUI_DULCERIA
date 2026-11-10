@@ -5,20 +5,24 @@ from tkinter import messagebox, simpledialog
 from datetime import datetime
 from modelos.modelo import ModeloDulceria
 from servicios.repositorio_ventas import RepositorioVentas
+from servicios.repositorio_apartados import RepositorioApartados
+from servicios.repositorio_pedidos import RepositorioPedidos
 from servicios.tareas_ventas import TareaCargarVentas, TareaExportarReporte
 
 class ControladorDulceria:
     def __init__(self):
         self.modelo = ModeloDulceria()
         self.repo_ventas = RepositorioVentas()
-        
+        self.repo_apartados = RepositorioApartados()
+        self.repo_pedidos = RepositorioPedidos()
         self.usuario_actual = None
         self.id_usuario_actual = None
         self.rol_actual = None
         self.inicio_sesion = None
         self.id_turno_actual = None
         self.vista = None
-        
+
+        # --- Variables para el Historial ---
         self.cola_tareas = queue.Queue()
         self.hilo_carga = None
         self.hilo_export = None
@@ -36,130 +40,34 @@ class ControladorDulceria:
             self.rol_actual = self.modelo.obtener_rol(user_data["id_rol"])
             self.inicio_sesion = datetime.now()
             
-            self.vista.mostrar_alerta("Inicio de sesión", f"¡Bienvenido/a, {usuario}!", "info")
             self.vista.pantallas["PantallaLogin"].entry_usuario.delete(0, "end")
             self.vista.pantallas["PantallaLogin"].entry_pass.delete(0, "end")
 
             if self.rol_actual == "Cajero":
+                # REGLA 7: Selección de Caja
+                num_caja = simpledialog.askinteger("Abrir Caja", "¿En qué número de caja vas a trabajar? (1-4)", minvalue=1, maxvalue=4)
+                if not num_caja:
+                    messagebox.showwarning("Cancelado", "Debes seleccionar una caja para iniciar.")
+                    return
+                
+                self.id_turno_actual = self.modelo._ejecutar_consulta(
+                    "INSERT INTO cortes_caja (fondo_inicial, id_usuario, id_caja) VALUES (500.00, %s, %s)", 
+                    (self.id_usuario_actual, num_caja)
+                )
                 opciones = ["PUNTO DE VENTA", "COBROS Y PAGOS", "TICKETS", "HISTORIAL DE VENTAS", "CIERRE DE CAJA"]
-                self.id_turno_actual = self.modelo.abrir_turno(self.id_usuario_actual, id_caja=1)
             else:
-                opciones = ["INICIO", "NUEVA VENTA", "COBROS Y PAGOS", "INVENTARIO", "APARTADOS", "PROVEEDORES", "HISTORIAL"]
+                opciones = ["INICIO", "NUEVA VENTA", "REPORTES", "COBROS Y PAGOS", "INVENTARIO", "APARTADOS", "PROVEEDORES", "HISTORIAL"]
 
+            messagebox.showinfo("Bienvenido", f"Sesión iniciada como {usuario} ({self.rol_actual})")
             self.vista.pantallas["MenuPrincipal"].configurar_acceso(usuario, self.rol_actual, opciones)
             self.vista.mostrar_pantalla("MenuPrincipal")
         else:
-            self.vista.mostrar_alerta("Datos incorrectos", "Las claves de acceso no son correctas.", "error")
-            self.vista.pantallas["PantallaLogin"].entry_pass.delete(0, "end")
-
-    # ---------------- PRODUCTOS / INVENTARIO ----------------
-    def procesar_eliminar_producto(self, nombre_producto):
-        if self.rol_actual != "Administrador":
-            return False, "No tienes permisos."
-        if self.modelo.eliminar_producto(nombre_producto):
-            return True, f"Producto '{nombre_producto}' eliminado."
-        return False, "Error al eliminar."
-
-    def obtener_inventario_filtrado(self, texto, marca, categoria):
-        return self.modelo.obtener_inventario_filtrado(texto, marca, categoria)
-
-    def obtener_pedidos_activos(self):
-        return self.modelo.obtener_pedidos_activos()
-
-    def recibir_pedido(self, id_pedido):
-        return self.modelo.recibir_pedido_proveedor(id_pedido)
-
-    def cancelar_pedido(self, id_pedido):
-        return self.modelo.cancelar_pedido_proveedor(id_pedido)
-
-    # ---------------- PROVEEDORES ----------------
-    def obtener_proveedores(self):
-        return self.modelo.obtener_proveedores()
-
-    def procesar_nuevo_proveedor(self, nombre, telefono, correo):
-        if self.rol_actual != "Administrador": return False, "Acceso denegado."
-        resultado = self.modelo.agregar_proveedor(nombre, telefono, correo)
-        if resultado == "nombre_vacio": return False, "El nombre no puede estar vacío."
-        if resultado == "ya_existe": return False, f"Ya existe '{nombre}'."
-        return True, f"Proveedor '{nombre}' agregado."
-
-    def procesar_eliminar_proveedor(self, proveedor_id):
-        if self.rol_actual != "Administrador": return False
-        self.modelo.eliminar_proveedor(proveedor_id)
-        return True
-
-    # ---------------- APARTADOS ----------------
-    def obtener_lista_apartados(self):
-        return self.modelo.obtener_apartados()
-
-    def obtener_nombres_productos(self):
-        return self.modelo.obtener_nombres_productos()
-
-    def registrar_apartado(self, nombre, telefono, fecha, prod_nombre, cant_str, metodo_texto):
-        try:
-            cant = int(cant_str)
-            if cant <= 0: raise ValueError
-        except ValueError:
-            return False, "La cantidad debe ser un número entero positivo."
-            
-        return self.modelo.registrar_apartado(nombre, telefono, fecha, prod_nombre, cant, metodo_texto, self.id_turno_actual)
-
-    def cancelar_apartado(self, id_apartado):
-        return self.modelo.cancelar_apartado(id_apartado)
-
-    # ---------------- COBROS Y VENTAS ----------------
-    def procesar_cobro_avanzado(self, pagos, datos_factura):
-        if not self.modelo.ticket_actual:
-            messagebox.showwarning("Aviso", "El ticket está vacío.")
-            return False
-
-        total = self.modelo.calcular_total()
-        total_pagado = sum(p["monto"] for p in pagos)
-        
-        if total_pagado < total:
-            messagebox.showwarning("Pago insuficiente", f"El total es ${total:.2f}, ingresaste ${total_pagado:.2f}.")
-            return False
-
-        carrito_respaldo = [dict(i) for i in self.modelo.ticket_actual]
-        
-        try:
-            self.repo_ventas.registrar(
-                articulos=carrito_respaldo,
-                pagos=pagos,
-                id_corte_caja=self.id_turno_actual,
-                datos_factura=datos_factura
-            )
-            self.modelo.ticket_actual.clear()
-            
-            cambio = total_pagado - total
-            mensaje = f"¡Venta procesada con éxito!\nTotal: ${total:.2f}\n"
-            if cambio > 0:
-                mensaje += f"Cambio a entregar: ${cambio:.2f}"
-            
-            messagebox.showinfo("Ticket Cobrado", mensaje)
-            return True
-        except Exception as e:
-            messagebox.showerror("Error", f"No se pudo guardar la venta: {e}")
-            return False
-
-    def procesar_agregar(self, nombre_producto):
-        cantidad = simpledialog.askinteger("Cantidad", f"¿Cuántos '{nombre_producto}' deseas agregar?")
-        if cantidad and cantidad > 0:
-            resultado = self.modelo.agregar_al_ticket(nombre_producto, cantidad)
-            if resultado == "stock_insuficiente": messagebox.showerror("Error", "No hay suficiente stock.")
-            elif resultado == "no_encontrado": messagebox.showerror("Error", "Producto no encontrado.")
-
-    def obtener_datos_ventas(self):
-        return self.modelo.inventario, self.modelo.ticket_actual, self.modelo.calcular_total()
-
-    def vaciar_ticket_actual(self):
-        self.modelo.ticket_actual.clear()
+            self.vista.mostrar_alerta("Datos incorrectos", "Las claves son incorrectas.", "error")
 
     # ---------------- HISTORIAL (HILOS) ----------------
     def iniciar_carga_ventas(self, fecha_filtro=""):
         if self.estado_carga["estado"] in ("cargando", "cancelando"): return False
         self._cancelar_carga = threading.Event()
-        
         filtro_usuario = self.usuario_actual if self.rol_actual == "Cajero" else None
         
         tarea = TareaCargarVentas(self.repo_ventas, self.cola_tareas, self._cancelar_carga, fecha_filtro, usuario_filtro=filtro_usuario)
@@ -208,7 +116,77 @@ class ControladorDulceria:
         pendientes, self._notificaciones = self._notificaciones, []
         return pendientes
 
-    # ---------------- CIERRE DE CAJA ----------------
+    # ---------------- OTROS MÉTODOS ----------------
+    def obtener_reporte_ganancias(self):
+        return self.modelo.obtener_reporte_ganancias()
+
+    def registrar_merma(self, id_producto, cantidad, motivo):
+        return self.modelo.registrar_merma(id_producto, cantidad, motivo)
+
+    def obtener_inventario_filtrado(self, texto, marca, categoria):
+        productos = self.modelo.inventario
+        filtrados = []
+        for p in productos:
+            if texto and texto not in p["nombre"].lower() and texto not in p["marca"].lower(): continue
+            if marca != "Todas" and p["marca"] != marca: continue
+            if categoria != "Todas" and p["categoria"] != categoria: continue
+            filtrados.append(p)
+        return filtrados
+
+    def obtener_proveedores(self):
+        return self.modelo.obtener_proveedores()
+
+    def obtener_productos_proveedor(self, id_proveedor):
+        return self.modelo.obtener_productos_proveedor(id_proveedor)
+
+    def crear_pedido_manual(self, id_proveedor, articulos):
+        return self.repo_pedidos.crear_pedido_manual(id_proveedor, self.id_usuario_actual, articulos)
+
+    def obtener_pedidos_activos(self):
+        return self.modelo.obtener_pedidos_activos()
+
+    def recibir_pedido(self, id_pedido):
+        return self.modelo.recibir_pedido_proveedor(id_pedido)
+
+    def obtener_lista_apartados(self):
+        return self.modelo.obtener_apartados()
+
+    def registrar_apartado(self, nombre, telefono, fecha, articulos, pagos):
+        try:
+            self.repo_apartados.registrar_apartado(nombre, telefono, fecha, articulos, self.id_turno_actual, pagos)
+            return True, "Apartado registrado con éxito."
+        except Exception as e:
+            return False, str(e)
+
+    def liquidar_apartado(self, id_apartado, pagos):
+        return self.repo_apartados.liquidar_apartado(id_apartado, pagos, self.id_turno_actual)
+
+    def cancelar_apartado(self, id_apartado):
+        self.modelo._ejecutar_consulta("UPDATE apartados SET estado='cancelado' WHERE id_apartado=%s", (id_apartado,))
+        return True
+
+    def procesar_cobro_avanzado(self, pagos, datos_factura):
+        if not self.modelo.ticket_actual: return False, "Carrito vacío"
+        total = self.modelo.calcular_total()
+        total_pagado = sum(p["monto"] for p in pagos)
+        if total_pagado < total: return False, f"Faltan ${total - total_pagado:.2f}"
+
+        try:
+            self.repo_ventas.registrar(self.modelo.ticket_actual, pagos, self.id_turno_actual, datos_factura)
+            self.modelo.ticket_actual.clear()
+            return True, f"Venta exitosa. Cambio: ${total_pagado - total:.2f}"
+        except Exception as e:
+            return False, str(e)
+
+    def obtener_datos_ventas(self):
+        return self.modelo.inventario, self.modelo.ticket_actual, self.modelo.calcular_total()
+
+    def obtener_nombres_productos(self):
+        return [p["nombre"] for p in self.modelo.inventario]
+
+    def vaciar_ticket_actual(self):
+        self.modelo.ticket_actual.clear()
+
     def obtener_resumen_cierre_caja(self):
         fin = datetime.now()
         inicio = self.inicio_sesion or fin
@@ -216,26 +194,17 @@ class ControladorDulceria:
         segundos = max(0, int(duracion.total_seconds()))
         horas, resto = divmod(segundos, 3600)
         minutos, segundos = divmod(resto, 60)
-
-        efectivo_esperado = self.repo_ventas.efectivo_turno(self.id_turno_actual) if self.id_turno_actual else 0.0
-
+        efectivo = self.repo_ventas.efectivo_turno(self.id_turno_actual) if self.id_turno_actual else 0.0
         return {
-            "usuario": self.usuario_actual or "",
-            "inicio": inicio.strftime("%d/%m/%Y %H:%M:%S"),
-            "fin": fin.strftime("%d/%m/%Y %H:%M:%S"),
-            "duracion": f"{horas:02d}h {minutos:02d}m {segundos:02d}s",
-            "efectivo_esperado": efectivo_esperado 
+            "usuario": self.usuario_actual or "", "inicio": inicio.strftime("%d/%m/%Y %H:%M:%S"),
+            "fin": fin.strftime("%d/%m/%Y %H:%M:%S"), "duracion": f"{horas:02d}h {minutos:02d}m {segundos:02d}s",
+            "efectivo_esperado": efectivo 
         }
 
     def cerrar_sesion(self, efectivo_fisico=None):
         if efectivo_fisico is not None and self.id_turno_actual:
-            self.modelo.cerrar_turno(self.id_turno_actual, efectivo_fisico)
-            self.id_turno_actual = None
-
+            self.modelo._ejecutar_consulta("UPDATE cortes_caja SET fecha_hora_fin=NOW(), efectivo_contado=%s, estado='cerrado' WHERE id_corte_caja=%s", (efectivo_fisico, self.id_turno_actual))
         self.modelo.ticket_actual.clear()
         self.usuario_actual = None
-        self.rol_actual = None
         self.vista.pantallas["MenuPrincipal"].configurar_acceso("", None, [])
         self.vista.mostrar_pantalla("PantallaLogin")
-        self.vista.pantallas["PantallaLogin"].entry_usuario.delete(0, "end")
-        self.vista.pantallas["PantallaLogin"].entry_pass.delete(0, "end")

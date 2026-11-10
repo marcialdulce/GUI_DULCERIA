@@ -23,9 +23,9 @@ class ModeloDulceria:
             conexion.commit()
             self.invalidar_inventario()
             return cursor.lastrowid or True
-        except Exception:
+        except Exception as e:
             conexion.rollback()
-            raise
+            raise e
         finally:
             if cursor: cursor.close()
             if conexion.is_connected(): conexion.close()
@@ -43,7 +43,7 @@ class ModeloDulceria:
         resultado = self._ejecutar_consulta(query, (id_rol,), fetch=True)
         return resultado["nombre_rol"] if resultado else "Cajero"
 
-    # ---------------- Inventario ----------------
+    # ---------------- Inventario y Mermas ----------------
     def invalidar_inventario(self):
         self._cache_inventario = None
 
@@ -56,7 +56,6 @@ class ModeloDulceria:
         return self._cache_inventario
 
     def _consultar_inventario(self):
-        # Consulta estricta basada en el último movimiento registrado
         query = """
             SELECT p.id_producto, p.nombre_dulce AS nombre, m.nombre_marca AS marca, 
                    c.nombre_categoria AS categoria, p.precio_venta AS precio,
@@ -76,27 +75,30 @@ class ModeloDulceria:
             f["stock"] = int(f["stock_actual"])
         return filas
 
-    def obtener_inventario_filtrado(self, texto, marca, categoria):
-        productos = self.inventario
-        filtrados = []
-        for p in productos:
-            if texto and texto not in p["nombre"].lower() and texto not in p["marca"].lower():
-                continue
-            if marca != "Todas" and p["marca"] != marca:
-                continue
-            if categoria != "Todas" and p["categoria"] != categoria:
-                continue
-            filtrados.append(p)
-        return filtrados
-
-    def obtener_nombres_productos(self):
-        # Solo muestra productos que tengan stock disponible para apartar
-        return [p["nombre"] for p in self.inventario if p["stock"] > 0]
-
-    def eliminar_producto(self, nombre_producto):
-        # Borrado lógico (cambia el estado a inactivo)
-        self._ejecutar_consulta("UPDATE productos SET estado = 'inactivo' WHERE nombre_dulce = %s", (nombre_producto,))
-        return True
+    def registrar_merma(self, id_producto, cantidad, motivo):
+        con = conectar_bd()
+        try:
+            cur = con.cursor(dictionary=True)
+            cur.execute("SELECT stock_resultante FROM movimientos_inventario WHERE id_producto=%s ORDER BY id_movimiento_inventario DESC LIMIT 1", (id_producto,))
+            res = cur.fetchone()
+            stock_actual = res["stock_resultante"] if res else 0
+            
+            if cantidad > stock_actual:
+                return False, "No puedes mermar más de lo que tienes en stock."
+                
+            nuevo_stock = stock_actual - cantidad
+            cur.execute("""
+                INSERT INTO movimientos_inventario (tipo, cantidad, stock_resultante, id_producto)
+                VALUES ('ajuste', %s, %s, %s)
+            """, (-cantidad, nuevo_stock, id_producto))
+            con.commit()
+            self.invalidar_inventario()
+            return True, "Merma registrada correctamente."
+        except Exception as e:
+            con.rollback()
+            return False, str(e)
+        finally:
+            con.close()
 
     def agregar_al_ticket(self, nombre_producto, cantidad):
         prod = next((p for p in self.inventario if p["nombre"] == nombre_producto), None)
@@ -124,30 +126,49 @@ class ModeloDulceria:
         subtotal = sum(item["subtotal"] for item in self.ticket_actual)
         return subtotal + round(subtotal * 0.16, 2)
 
-    # ---------------- Proveedores ----------------
-    def agregar_proveedor(self, nombre, telefono="", correo=""):
-        if not nombre or not nombre.strip(): return "nombre_vacio"
-        existe = self._ejecutar_consulta("SELECT id_proveedor FROM proveedores WHERE empresa = %s", (nombre,), fetch=True)
-        if existe: return "ya_existe"
-        
-        query = "INSERT INTO proveedores (empresa, telefono, correo) VALUES (%s, %s, %s)"
-        self._ejecutar_consulta(query, (nombre.strip(), telefono.strip(), correo.strip()))
-        return True
+    # ---------------- Reportes y Ganancias ----------------
+    def obtener_reporte_ganancias(self):
+        try:
+            query = "SELECT * FROM vista_ganancias_productos ORDER BY ganancia_bruta DESC"
+            filas = self._ejecutar_consulta(query, fetchall=True) or []
+            
+            ingreso_total = sum(float(f["ingresos_totales"]) for f in filas)
+            costo_total = sum(float(f["unidades_vendidas"]) * float(f["costo_unitario"]) for f in filas)
+            utilidad = ingreso_total - costo_total
+            
+            return {
+                "detalle": filas,
+                "ingreso_total": ingreso_total,
+                "costo_total": costo_total,
+                "utilidad_bruta": utilidad
+            }
+        except Exception as e:
+            # Si hay un error (como que falte la vista), mostramos la alerta en consola
+            # y devolvemos ceros para que la interfaz no se caiga.
+            print(f"Error al cargar reportes: {e}")
+            return {
+                "detalle": [],
+                "ingreso_total": 0.0,
+                "costo_total": 0.0,
+                "utilidad_bruta": 0.0
+            }
 
+    # ---------------- Proveedores / Pedidos ----------------
     def obtener_proveedores(self):
         query = "SELECT id_proveedor as id, empresa as nombre, telefono, correo FROM proveedores"
         return self._ejecutar_consulta(query, fetchall=True) or []
-    
-    def eliminar_proveedor(self, proveedor_id):
-        self._ejecutar_consulta("UPDATE productos SET id_proveedor = NULL WHERE id_proveedor = %s", (proveedor_id,))
-        self._ejecutar_consulta("DELETE FROM proveedores WHERE id_proveedor = %s", (proveedor_id,))
-        return True
 
-    # ---------------- Pedidos a Proveedores ----------------
+    def obtener_productos_proveedor(self, id_proveedor):
+        query = """
+            SELECT id_producto, nombre_dulce as nombre, precio_venta 
+            FROM productos WHERE id_proveedor = %s AND estado = 'activo'
+        """
+        return self._ejecutar_consulta(query, (id_proveedor,), fetchall=True) or []
+
     def obtener_pedidos_activos(self):
         query = """
             SELECT pp.id_pedido_proveedor as id_pedido, p.nombre_dulce as producto, 
-                   dpp.cantidad, pp.estado
+                   dpp.cantidad, pp.estado, pp.subtotal
             FROM pedidos_proveedores pp
             JOIN detalles_pedidos_proveedores dpp ON pp.id_pedido_proveedor = dpp.id_pedido_proveedor
             JOIN productos p ON dpp.id_producto = p.id_producto
@@ -160,11 +181,7 @@ class ModeloDulceria:
         if not con: return False
         try:
             cur = con.cursor(dictionary=True)
-            cur.execute("""
-                SELECT dpp.id_producto, dpp.cantidad, dpp.id_detalle_pedido_proveedor
-                FROM detalles_pedidos_proveedores dpp
-                WHERE dpp.id_pedido_proveedor = %s
-            """, (id_pedido,))
+            cur.execute("SELECT id_producto, cantidad, id_detalle_pedido_proveedor FROM detalles_pedidos_proveedores WHERE id_pedido_proveedor = %s", (id_pedido,))
             detalles = cur.fetchall()
             
             for det in detalles:
@@ -172,7 +189,6 @@ class ModeloDulceria:
                 res = cur.fetchone()
                 stock_actual = res["stock_resultante"] if res else 0
                 nuevo_stock = stock_actual + det["cantidad"]
-
                 cur.execute("""
                     INSERT INTO movimientos_inventario (tipo, cantidad, stock_resultante, id_producto, id_detalle_pedido_proveedor)
                     VALUES ('entrada', %s, %s, %s, %s)
@@ -182,69 +198,22 @@ class ModeloDulceria:
             con.commit()
             self.invalidar_inventario()
             return True
-        except Exception as e:
+        except Exception:
             con.rollback()
-            raise e
+            return False
         finally:
             con.close()
-
-    def cancelar_pedido_proveedor(self, id_pedido):
-        self._ejecutar_consulta("UPDATE pedidos_proveedores SET estado='cancelado' WHERE id_pedido_proveedor=%s", (id_pedido,))
-        return True
 
     # ---------------- Apartados ----------------
     def obtener_apartados(self):
         query = """
-            SELECT a.id_apartado, a.nombre_cliente AS nombre, a.telefono_cliente AS telefono,
+            SELECT a.id_apartado, a.nombre_cliente AS nombre, 
                    DATE_FORMAT(a.fecha_entrega, '%d/%m/%Y') AS fecha, a.estado, 
-                   p.nombre_dulce AS producto, da.cantidad AS unidades
+                   p.nombre_dulce AS producto, da.cantidad AS unidades, a.subtotal, a.impuesto,
+                   (SELECT COALESCE(SUM(monto), 0) FROM pagos_apartados pa WHERE pa.id_apartado = a.id_apartado) as pagado
             FROM apartados a
             JOIN detalles_apartados da ON a.id_apartado = da.id_apartado
             JOIN productos p ON da.id_producto = p.id_producto
             ORDER BY a.fecha_entrega
         """
         return self._ejecutar_consulta(query, fetchall=True) or []
-
-    def registrar_apartado(self, nombre, telefono, fecha_entrega, prod_nombre, cantidad, metodo_texto, id_corte_caja):
-        prod = next((p for p in self.inventario if p["nombre"] == prod_nombre), None)
-        if not prod: return False, "Producto no encontrado."
-        if prod["stock"] < cantidad: return False, f"Stock insuficiente. Solo hay {prod['stock']} unidades."
-
-        total = prod["precio"] * cantidad
-        anticipo = round(total * 0.50, 2)
-        id_metodo = 1 if metodo_texto == "Efectivo" else (2 if metodo_texto == "Tarjeta de débito" else 3)
-
-        con = conectar_bd()
-        if not con: return False, "Error de conexión a BD."
-        try:
-            cur = con.cursor(dictionary=True)
-            subtotal = total
-            impuesto = round(subtotal * 0.16, 2)
-            
-            cur.execute("""
-                INSERT INTO apartados (nombre_cliente, telefono_cliente, fecha_entrega, subtotal, impuesto, estado, id_corte_caja)
-                VALUES (%s, %s, %s, %s, %s, 'pendiente', %s)
-            """, (nombre, telefono, fecha_entrega, subtotal, impuesto, id_corte_caja))
-            id_apartado = cur.lastrowid
-            
-            cur.execute("""
-                INSERT INTO detalles_apartados (cantidad, precio_unitario, subtotal, id_apartado, id_producto)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (cantidad, prod["precio"], subtotal, id_apartado, prod["id_producto"]))
-                
-            cur.execute("""
-                INSERT INTO pagos_apartados (monto, id_apartado, id_metodo_pago, id_corte_caja)
-                VALUES (%s, %s, %s, %s)
-            """, (anticipo, id_apartado, id_metodo, id_corte_caja))
-            
-            con.commit()
-            return True, f"Éxito. Total: ${total:.2f}, Anticipo cobrado: ${anticipo:.2f}"
-        except Exception as e:
-            con.rollback()
-            return False, str(e)
-        finally:
-            con.close()
-
-    def cancelar_apartado(self, id_apartado):
-        self._ejecutar_consulta("UPDATE apartados SET estado='cancelado' WHERE id_apartado=%s", (id_apartado,))
-        return True

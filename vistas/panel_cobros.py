@@ -6,82 +6,71 @@ class PanelCobros(tk.Frame):
     def __init__(self, parent, controlador):
         super().__init__(parent, bg=estilos.FONDO)
         self.controlador = controlador
-        self.pagos_registrados = [] 
+        self.pagos = []
+        self.datos_factura = None
+
+        tk.Label(self, text="COBRO Y FACTURACIÓN", bg=estilos.FONDO, font=("Arial", 18, "bold")).pack(pady=10)
+        self.lbl_total = tk.Label(self, text="$0.00", bg=estilos.FONDO, fg="#27AE60", font=("Arial", 24, "bold"))
+        self.lbl_total.pack()
+
+        frame_pago = tk.Frame(self, bg=estilos.FONDO); frame_pago.pack(pady=10)
+        self.cmb_metodo = ttk.Combobox(frame_pago, values=["Efectivo", "Tarjeta de débito", "Tarjeta de crédito"], state="readonly")
+        self.cmb_metodo.current(0); self.cmb_metodo.pack(side="left")
         
-        tk.Label(self, text="COBROS Y PAGOS MIXTOS", bg=estilos.FONDO,
-                 fg="#4A2E35", font=("Arial", 20, "bold")).pack(pady=(20, 12))
-
-        cuerpo = tk.Frame(self, bg="#F4F4F4", bd=1, relief="solid")
-        cuerpo.pack(fill="both", expand=True, padx=35, pady=15)
+        self.e_monto = tk.Entry(frame_pago, width=10); self.e_monto.pack(side="left", padx=5)
+        self.e_ref = tk.Entry(frame_pago, width=15); self.e_ref.insert(0, "Ref. Tarjeta"); self.e_ref.pack(side="left", padx=5)
         
-        tk.Label(cuerpo, text="RESUMEN DE COMPRA", bg="#F4F4F4", font=("Arial", 12, "bold")).pack(pady=10)
-        self.total_label = tk.Label(cuerpo, text="$0.00", bg="#F4F4F4", fg="#3A8D96", font=("Arial", 18, "bold"))
-        self.total_label.pack()
+        tk.Button(frame_pago, text="+ Pago", command=self.agregar_pago).pack(side="left")
 
-        frame_pago = tk.Frame(cuerpo, bg="#F4F4F4")
-        frame_pago.pack(fill="x", padx=25, pady=15)
-        
-        tk.Label(frame_pago, text="Método:", bg="#F4F4F4").pack(side="left")
-        self.combo_metodo = ttk.Combobox(frame_pago, values=["Efectivo", "Tarjeta de débito", "Tarjeta de crédito"], state="readonly", width=18)
-        self.combo_metodo.current(0)
-        self.combo_metodo.pack(side="left", padx=5)
+        self.tabla_pagos = ttk.Treeview(self, columns=("M", "R", "MONTO"), show="headings", height=4)
+        for c in ("M", "R", "MONTO"): self.tabla_pagos.heading(c, text=c)
+        self.tabla_pagos.pack(fill="x", padx=50)
 
-        tk.Label(frame_pago, text="Monto: $", bg="#F4F4F4").pack(side="left", padx=(10,0))
-        self.entry_monto = tk.Entry(frame_pago, width=10)
-        self.entry_monto.pack(side="left", padx=5)
-
-        tk.Button(frame_pago, text="+ Agregar Pago", bg="#3A8D96", fg="white", command=self.agregar_pago).pack(side="left", padx=10)
-
-        self.tabla_pagos = ttk.Treeview(cuerpo, columns=("Método", "Monto"), show="headings", height=5)
-        self.tabla_pagos.heading("Método", text="MÉTODO DE PAGO")
-        self.tabla_pagos.heading("Monto", text="MONTO")
-        self.tabla_pagos.column("Método", anchor="center")
-        self.tabla_pagos.column("Monto", anchor="center")
-        self.tabla_pagos.pack(fill="x", padx=25, pady=5)
-
-        botones = tk.Frame(cuerpo, bg="#F4F4F4")
-        botones.pack(fill="x", padx=20, pady=20)
-        
-        tk.Button(botones, text="LIMPIAR PAGOS", bg="#E6B0AA", font=("Arial", 9, "bold"), command=self.limpiar_pagos).pack(side="left", padx=5)
-        tk.Button(botones, text="CONFIRMAR Y COBRAR", bg="#F4D03F", font=("Arial", 10, "bold"), command=self.confirmar_cobro).pack(side="right", padx=5)
+        tk.Button(self, text="🧾 AGREGAR FACTURA", bg="#8E44AD", fg="white", command=self.abrir_factura).pack(pady=10)
+        tk.Button(self, text="CONFIRMAR COBRO", bg="#F4D03F", font=("Arial", 12, "bold"), command=self.cobrar).pack(pady=10)
 
         self.refrescar()
 
     def refrescar(self):
         _, _, total = self.controlador.obtener_datos_ventas()
-        self.total_label.config(text=f"${total:.2f}")
+        self.lbl_total.config(text=f"${total:.2f}")
 
     def agregar_pago(self):
-        try:
-            monto = float(self.entry_monto.get())
-            if monto <= 0: raise ValueError
-        except ValueError:
-            messagebox.showerror("Error", "Ingresa un monto válido mayor a 0.")
-            return
-
-        metodo_texto = self.combo_metodo.get()
-        id_metodo = 1 if metodo_texto == "Efectivo" else (2 if metodo_texto == "Tarjeta de débito" else 3)
+        try: monto = float(self.e_monto.get())
+        except: return
+        metodo = self.cmb_metodo.get()
+        id_m = 1 if metodo == "Efectivo" else (2 if metodo == "Tarjeta de débito" else 3)
+        ref = self.e_ref.get() if metodo != "Efectivo" and self.e_ref.get() != "Ref. Tarjeta" else None
         
-        self.pagos_registrados.append({"id_metodo_pago": id_metodo, "monto": monto})
-        self.tabla_pagos.insert("", "end", values=(metodo_texto, f"${monto:.2f}"))
-        self.entry_monto.delete(0, "end")
+        self.pagos.append({"id_metodo_pago": id_m, "monto": monto, "referencia": ref})
+        self.tabla_pagos.insert("", "end", values=(metodo, ref or "-", f"${monto:.2f}"))
+        self.e_monto.delete(0, "end")
 
-    def limpiar_pagos(self):
-        self.pagos_registrados.clear()
-        for fila in self.tabla_pagos.get_children():
-            self.tabla_pagos.delete(fila)
+    def abrir_factura(self):
+        modal = tk.Toplevel(self)
+        modal.geometry("350x400")
+        
+        campos = [("RFC:", "rfc"), ("Razón Social:", "razon_social"), ("Régimen Fiscal:", "regimen"), ("Código Postal:", "cp"), ("Correo:", "correo")]
+        entries = {}
+        for txt, key in campos:
+            tk.Label(modal, text=txt).pack()
+            e = tk.Entry(modal); e.pack()
+            entries[key] = e
 
-    def confirmar_cobro(self):
-        _, carrito, _ = self.controlador.obtener_datos_ventas()
-        if not carrito:
-            messagebox.showwarning("Ticket vacío", "No hay productos en el carrito.")
-            return
-            
-        if not self.pagos_registrados:
-            messagebox.showwarning("Sin pagos", "Debes agregar al menos un método de pago.")
-            return
+        def guardar():
+            self.datos_factura = {"requiere": True}
+            for k, e in entries.items(): self.datos_factura[k] = e.get()
+            messagebox.showinfo("Éxito", "Datos fiscales listos.")
+            modal.destroy()
 
-        exito = self.controlador.procesar_cobro_avanzado(self.pagos_registrados, datos_factura=None)
+        tk.Button(modal, text="GUARDAR DATOS", command=guardar).pack(pady=10)
+
+    def cobrar(self):
+        exito, msg = self.controlador.procesar_cobro_avanzado(self.pagos, self.datos_factura)
         if exito:
-            self.limpiar_pagos()
+            messagebox.showinfo("Éxito", msg)
+            self.pagos.clear(); self.tabla_pagos.delete(*self.tabla_pagos.get_children())
+            self.datos_factura = None
             self.refrescar()
+        else:
+            messagebox.showerror("Error", msg)
