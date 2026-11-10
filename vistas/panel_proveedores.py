@@ -12,14 +12,17 @@ class PanelProveedores(tk.Frame):
 
         tk.Label(self, text="GESTIÓN DE PROVEEDORES Y PEDIDOS", bg="#3A8D96", fg="white", font=("Arial", 11, "bold")).pack(fill="x", pady=5)
         
+        # --- BOTONERA SUPERIOR ---
         frame_btns = tk.Frame(self, bg=estilos.FONDO)
         frame_btns.pack(pady=10)
         tk.Button(frame_btns, text="+ NUEVO PEDIDO MANUAL", bg="#27AE60", fg="white", command=self.nuevo_pedido).pack(side="left", padx=10)
-        tk.Button(frame_btns, text=" VER PEDIDOS ACTIVOS", bg="#2980B9", fg="white", command=self.ver_pedidos).pack(side="left", padx=10)
+        tk.Button(frame_btns, text="VER PEDIDOS ACTIVOS", bg="#2980B9", fg="white", command=self.ver_pedidos).pack(side="left", padx=10)
         tk.Button(frame_btns, text="- ELIMINAR PROVEEDOR", bg="#E74C3C", fg="white", command=self.eliminar_proveedor_seleccionado).pack(side="left")
 
+        # --- TABLA DE PROVEEDORES ---
+        # Aseguramos que la tabla permita la selección para poder eliminar
         cols = ("ID", "NOMBRE", "TELÉFONO", "CORREO")
-        self.tabla = ttk.Treeview(self, columns=cols, show="headings", height=15)
+        self.tabla = ttk.Treeview(self, columns=cols, show="headings", height=15, selectmode="browse")
         for c in cols: 
             self.tabla.heading(c, text=c)
             self.tabla.column(c, anchor="center", width=150)
@@ -33,11 +36,13 @@ class PanelProveedores(tk.Frame):
             self.tabla.insert("", "end", values=(p["id"], p["nombre"], p.get("telefono", ""), p.get("correo", "")))
 
     def eliminar_proveedor_seleccionado(self):
+        """Identifica qué proveedor seleccionó el usuario y solicita su eliminación."""
         seleccion = self.tabla.selection()
         if not seleccion:
-            messagebox.showwarning("Selecciona un proveedor de la tabla para eliminarlo.")
+            messagebox.showwarning( "Selecciona un proveedor de la tabla haciendo clic en él para eliminarlo.")
             return
 
+        # Obtener los datos de la fila seleccionada
         item = self.tabla.item(seleccion[0])
         id_prov = item["values"][0]
         nombre_prov = item["values"][1]
@@ -45,12 +50,14 @@ class PanelProveedores(tk.Frame):
         respuesta = messagebox.askyesno("Confirmar Eliminación", f"¿Estás seguro de que deseas eliminar al proveedor '{nombre_prov}'?\n\nNota: No podrás eliminarlo si tiene pedidos registrados en el historial.")
         
         if respuesta:
+            # Llama a la base de datos a través del controlador
             if self.controlador.eliminar_proveedor(id_prov):
-                messagebox.showinfo( "Proveedor eliminado correctamente.")
+                messagebox.showinfo("Proveedor eliminado correctamente.")
                 self.refrescar()
             else:
                 messagebox.showerror("Error", "No se pudo eliminar el proveedor. Es posible que tenga pedidos activos o históricos vinculados a él.")
 
+    # --- (A CONTINUACIÓN DEBE IR EL RESTO DE TUS FUNCIONES PARA PEDIDOS Y CARRITO) ---
     def _cargar_prods(self, event):
         prov = next((p for p in self.controlador.obtener_proveedores() if p["nombre"] == self.cmb_prov.get()), None)
         if prov:

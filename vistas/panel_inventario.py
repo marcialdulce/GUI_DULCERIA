@@ -9,10 +9,17 @@ class PanelInventario(tk.Frame):
 
         barra = tk.Frame(self, bg="#3A8D96", height=40); barra.pack(fill="x", pady=10)
         
-        tk.Label(barra, text="BUSCAR:", bg="#3A8D96", fg="white").pack(side="left", padx=5)
-        self.txt_buscar = tk.Entry(barra); self.txt_buscar.pack(side="left")
-        self.txt_buscar.bind("<KeyRelease>", lambda e: self.notificar_filtros())
-
+        # --- FILTROS DE BÚSQUEDA ---
+        frame_filtros = tk.Frame(self, bg="#3A8D96")
+        frame_filtros.pack(fill="x", pady=5)
+        
+        tk.Label(frame_filtros, text="BUSCAR:", bg="#3A8D96", fg="white").pack(side="left", padx=10)
+        self.e_buscar = tk.Entry(frame_filtros, width=30)
+        self.e_buscar.pack(side="left", padx=5)
+        
+       
+        self.e_buscar.bind("<KeyRelease>", lambda event: self.notificar_filtros())
+        
         tk.Button(barra, text=" REGISTRAR MERMA", bg="#E74C3C", fg="white", command=self.abrir_merma).pack(side="right", padx=10)
 
         columnas = ("ID", "PRODUCTO", "PRECIO", "STOCK", "ESTADO")
@@ -23,7 +30,7 @@ class PanelInventario(tk.Frame):
         self.notificar_filtros()
 
     def notificar_filtros(self):
-        datos = self.controlador.obtener_inventario_filtrado(self.txt_buscar.get().lower(), "Todas", "Todas")
+        datos = self.controlador.obtener_inventario_filtrado(self.e_buscar.get().lower(), "Todas", "Todas")
         for f in self.tabla.get_children(): self.tabla.delete(f)
         for p in datos:
             self.tabla.insert("", "end", values=(p["id_producto"], p["nombre"], f"${p['precio']:.2f}", p["stock"], "AGOTADO" if p["stock"]==0 else "OK"))

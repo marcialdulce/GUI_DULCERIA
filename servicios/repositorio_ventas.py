@@ -8,60 +8,60 @@ class RepositorioVentas:
     def __init__(self):
         self.conexion_bd = conectar_bd
 
-    def registrar(self, articulos, pagos, id_corte_caja, datos_factura=None):
+    def registrar(self, carrito, pagos, id_turno, datos_factura=None):
+        from modelos.conexion import conectar_bd
         conexion = conectar_bd()
-        if not conexion:
-            raise ConnectionError("No hay conexión con la base de datos.")
+        if not conexion: raise Exception("No se pudo conectar a la base de datos.")
+        
         cursor = None
         try:
-            cursor = conexion.cursor(dictionary=True)
-            folio = "V-" + uuid.uuid4().hex[:8].upper()
-            fecha_hora = datetime.now().strftime(FORMATO_FECHA)
+            cursor = conexion.cursor()
             
-            subtotal = sum(a["subtotal"] for a in articulos)
-            impuesto = round(subtotal * 0.16, 2)
+            # --- SOLUCIÓN PARA ADMINISTRADORES ---
+            if not id_turno:
+                cursor.execute("SELECT MAX(id_corte_caja) FROM cortes_caja")
+                resultado = cursor.fetchone()
+                id_turno = resultado[0] if (resultado and resultado[0]) else 1
 
+            subtotal = sum(item["subtotal"] for item in carrito)
+            impuesto = subtotal * 0.16
+            
             cursor.execute("""
-                INSERT INTO ventas (folio, fecha_hora, subtotal, impuesto, id_corte_caja)
-                VALUES (%s,%s,%s,%s,%s)""", (folio, fecha_hora, subtotal, impuesto, id_corte_caja))
+                INSERT INTO ventas (subtotal, impuesto, id_corte_caja)
+                VALUES (%s, %s, %s)
+            """, (subtotal, impuesto, id_turno))
+            
             id_venta = cursor.lastrowid
-
-            for art in articulos:
+            
+            for item in carrito:
                 cursor.execute("""
-                    INSERT INTO detalles_ventas (cantidad, precio_unitario, subtotal, id_venta, id_producto)
-                    VALUES (%s,%s,%s,%s,%s)""", (art["cantidad"], art["precio_unitario"], art["subtotal"], id_venta, art["id_producto"]))
-                id_detalle_venta = cursor.lastrowid
-
-                cursor.execute("SELECT stock_resultante FROM movimientos_inventario WHERE id_producto = %s ORDER BY id_movimiento_inventario DESC LIMIT 1", (art["id_producto"],))
-                res_stock = cursor.fetchone()
-                stock_actual = res_stock["stock_resultante"] if res_stock else 0
-                nuevo_stock = stock_actual - art["cantidad"]
-
+                    INSERT INTO detalles_ventas (cantidad, precio_unitario, descuento, subtotal, id_venta, id_producto)
+                    VALUES (%s, %s, 0.00, %s, %s, %s)
+                """, (item["cantidad"], item["precio_unitario"], item["subtotal"], id_venta, item["id_producto"]))
+                
+            for p in pagos:
                 cursor.execute("""
-                    INSERT INTO movimientos_inventario (tipo, cantidad, stock_resultante, id_producto, id_detalle_venta)
-                    VALUES ('salida', %s, %s, %s, %s)""", (-art["cantidad"], nuevo_stock, art["id_producto"], id_detalle_venta))
-
-            for pago in pagos:
-                cursor.execute("""
-                    INSERT INTO pagos_ventas (monto, id_venta, id_metodo_pago, id_corte_caja, referencia_pago)
-                    VALUES (%s,%s,%s,%s,%s)""", (pago["monto"], id_venta, pago["id_metodo_pago"], id_corte_caja, pago.get("referencia", None)))
-
-            if datos_factura and datos_factura.get("requiere"):
+                    INSERT INTO pagos_ventas (monto, id_venta, id_metodo_pago, id_corte_caja)
+                    VALUES (%s, %s, %s, %s)
+                """, (p["monto"], id_venta, p["id_metodo"], id_turno))
+                
+            if datos_factura:
                 cursor.execute("""
                     INSERT INTO facturas (folio, rfc, razon_social, regimen_fiscal, cp_fiscal, correo, total, id_venta)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""", (
-                    f"FAC-{folio}", datos_factura["rfc"], datos_factura.get("razon_social", "Público General"), 
-                    datos_factura.get("regimen", "626"), datos_factura.get("cp", "39360"), 
-                    datos_factura.get("correo", ""), subtotal + impuesto, id_venta))
-
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (datos_factura["folio"], datos_factura["rfc"], datos_factura["razon_social"], 
+                      datos_factura["regimen"], datos_factura["cp"], datos_factura["correo"], 
+                      subtotal + impuesto, id_venta))
+                
             conexion.commit()
-            return {"id_venta": id_venta, "folio": folio}
+            return True
+            
         except Exception as e:
             conexion.rollback()
             raise e
         finally:
             if cursor: cursor.close()
-            conexion.close()
+            if conexion.is_connected(): conexion.close()
 
     def efectivo_turno(self, id_corte_caja):
         conexion = conectar_bd()

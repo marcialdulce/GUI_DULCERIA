@@ -249,7 +249,17 @@ class ControladorDulceria:
             "fin": fin.strftime("%d/%m/%Y %H:%M:%S"), "duracion": f"{horas:02d}h {minutos:02d}m {segundos:02d}s",
             "efectivo_esperado": efectivo 
         }
-
+        
+    def procesar_agregar(self, producto_diccionario, cantidad):
+        """Pide al modelo que meta el producto al ticket con la cantidad especificada."""
+        res = self.modelo.agregar_al_ticket(producto_diccionario["nombre"], cantidad)
+        
+        if res == "stock_insuficiente":
+            from tkinter import messagebox
+            messagebox.showwarning("Sin stock", f"No hay existencias suficientes de {producto_diccionario['nombre']}.")
+            return False
+        return True
+    
     def cerrar_sesion(self, efectivo_fisico=None):
         if efectivo_fisico is not None and self.id_turno_actual:
             self.modelo._ejecutar_consulta("UPDATE cortes_caja SET fecha_hora_fin=NOW(), efectivo_contado=%s, estado='cerrado' WHERE id_corte_caja=%s", (efectivo_fisico, self.id_turno_actual))

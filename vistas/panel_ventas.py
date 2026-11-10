@@ -15,6 +15,7 @@ class PanelVentas(tk.Frame):
         contenedor_principal = tk.Frame(self, bg=estilos.FONDO)
         contenedor_principal.pack(fill="both", expand=True, padx=15, pady=15)
 
+        # --- PANEL IZQUIERDO: CATÁLOGO DE PRODUCTOS ---
         panel_izq = tk.Frame(contenedor_principal, bg=estilos.FONDO)
         panel_izq.pack(side="left", fill="both", expand=True, padx=(0, 10))
 
@@ -41,6 +42,7 @@ class PanelVentas(tk.Frame):
         self.canvas_productos.bind("<Enter>", self._activar_scroll)
         self.canvas_productos.bind("<Leave>", self._desactivar_scroll)
 
+        # --- PANEL DERECHO: TICKET DE VENTA ---
         panel_der = tk.Frame(contenedor_principal, bg="#F4F4F4", bd=1, relief="solid")
         panel_der.pack(side="right", fill="both", expand=True, padx=(10, 0))
 
@@ -94,30 +96,63 @@ class PanelVentas(tk.Frame):
             item.pack(fill="x", pady=2, padx=2)
 
             tk.Label(item, text=producto["nombre"], bg=estilos.BLANCO, font=("Arial", 9, "bold")).grid(row=0, column=0, sticky="w", columnspan=2)
-            tk.Label(item, text=f"${producto['precio']:.2f}", bg=estilos.BLANCO, font=("Arial", 9)).grid(row=1, column=0, sticky="w", pady=3)
+            tk.Label(item, text=f"${float(producto['precio']):.2f}", bg=estilos.BLANCO, font=("Arial", 9)).grid(row=1, column=0, sticky="w", pady=3)
             tk.Label(item, text=f"STOCK: {producto['stock']}", bg=estilos.BLANCO, font=("Arial", 9)).grid(row=1, column=1, sticky="w", padx=15)
 
+            # --- BOTÓN DE AGREGAR: SE ENVÍA EL PRODUCTO COMPLETO ---
             btn_agregar = tk.Button(item, text="AGREGAR", bg="#F4D03F", fg=estilos.NEGRO, font=("Arial", 9, "bold"), width=12, relief="flat", 
-                                    command=lambda p=producto["nombre"]: self.intentar_agregar(p))
+                                    command=lambda p=producto: self.intentar_agregar(p))
             btn_agregar.grid(row=0, column=2, rowspan=2, sticky="e", padx=5)
             item.grid_columnconfigure(2, weight=1)
 
-    def intentar_agregar(self, nombre_producto):
-        self.controlador.procesar_agregar(nombre_producto)
-        _, carrito, total = self.controlador.obtener_datos_ventas()
-        self.dibujar_ticket(carrito, total)
+    def intentar_agregar(self, producto):
+        """Manda el producto al controlador pidiendo antes la cantidad."""
+        if producto['stock'] <= 0:
+            messagebox.showwarning("Atención", f"No hay existencias del producto '{producto['nombre']}'.")
+            return
+            
+        # 1. Pedir la cantidad al usuario
+        from tkinter import simpledialog
+        cantidad_pedida = simpledialog.askinteger(
+            "Cantidad", 
+            f"¿Cuántas unidades de\n{producto['nombre']}\ndeseas agregar?", 
+            minvalue=1, 
+            maxvalue=producto['stock']
+        )
+        
+        # Si el usuario cancela o cierra la ventanita, terminamos
+        if not cantidad_pedida: return 
+
+        # 2. Revisar si no excede el stock considerando lo que ya está en el carrito
+        _, carrito, _ = self.controlador.obtener_datos_ventas()
+        cantidad_en_carrito = sum(p["cantidad"] for p in carrito if p.get("producto") == producto["nombre"])
+                
+        if (cantidad_en_carrito + cantidad_pedida) > producto['stock']:
+            messagebox.showwarning("Atención", f"Límite excedido. Ya tienes {cantidad_en_carrito} en el carrito y solo hay {producto['stock']} en stock.")
+            return
+
+        # 3. Enviar la cantidad exacta al controlador
+        exito = self.controlador.procesar_agregar(producto, cantidad_pedida)
+        
+        if exito:
+            # Actualizamos solo la tabla visual
+            _, carrito, total = self.controlador.obtener_datos_ventas()
+            self.dibujar_ticket(carrito, float(total))
 
     def dibujar_ticket(self, carrito, total):
         for fila in self.tabla_ticket.get_children():
             self.tabla_ticket.delete(fila)
         for item in carrito:
-            self.tabla_ticket.insert("", "end", values=(item["producto"], item["cantidad"], f"${item['subtotal']:.2f}"))
+            # Usar la llave correcta según tu estructura, si no existe "producto", intenta con "nombre"
+            nombre_prod = item.get("producto") or item.get("nombre") or "Desconocido"
+            self.tabla_ticket.insert("", "end", values=(nombre_prod, item["cantidad"], f"${float(item['subtotal']):.2f}"))
         self.label_total.config(text=f"${total:.2f}")
 
     def refrescar_pantalla(self):
+        # Solicitamos los 3 datos al backend: Todos los productos, el carrito de esta sesión y la suma total
         productos, carrito, total = self.controlador.obtener_datos_ventas()
         self.dibujar_catalogo(productos)
-        self.dibujar_ticket(carrito, total)
+        self.dibujar_ticket(carrito, float(total))
 
     def limpiar_carrito(self):
         if messagebox.askyesno("Limpiar Carrito", "¿Estás seguro de vaciar el carrito actual? (Aún no se ha cobrado)"):
