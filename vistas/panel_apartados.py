@@ -2,6 +2,9 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 from datetime import datetime
 
+MSG_EXITO = "Éxito"
+MSG_AVISO = "Aviso"
+
 
 class PanelApartados(tk.Frame):
     def __init__(self, parent, controlador):
@@ -46,11 +49,23 @@ class PanelApartados(tk.Frame):
         self.cargar_tabla()
 
     def toggle_sel(self, event):
+        """Selección exclusiva de 1 apartado a la vez."""
         item = self.tabla.identify_row(event.y)
-        if item:
-            vals = list(self.tabla.item(item, "values"))
-            vals[0] = "☑" if vals[0] == "☐" else "☐"
-            self.tabla.item(item, values=vals)
+        if not item:
+            return
+
+        vals_click = list(self.tabla.item(item, "values"))
+        estaba_marcado = vals_click[0] == "☑"
+
+        for iid in self.tabla.get_children():
+            vals = list(self.tabla.item(iid, "values"))
+            if vals[0] == "☑":
+                vals[0] = "☐"
+                self.tabla.item(iid, values=vals)
+
+        if not estaba_marcado:
+            vals_click[0] = "☑"
+            self.tabla.item(item, values=vals_click)
 
     def obtener_seleccionados(self):
         return [self.tabla.item(i)["values"] for i in self.tabla.get_children() if self.tabla.item(i)["values"][0] == "☑"]
@@ -87,7 +102,7 @@ class PanelApartados(tk.Frame):
     def liquidar_apartado(self):
         sel = self.obtener_seleccionados()
         if not sel:
-            return messagebox.showwarning("Aviso", "Marca la casilla de un apartado.")
+            return messagebox.showwarning(MSG_AVISO, "Marca la casilla de 1 apartado.")
 
         item = sel[0]
         estado = str(item[7]).lower()
@@ -98,29 +113,29 @@ class PanelApartados(tk.Frame):
         pagado = float(str(item[6]).replace("$", ""))
         saldo = round(max(0.0, total - pagado), 2)
 
-        pago = simpledialog.askfloat("Liquidar", f"Saldo pendiente: ${saldo:.2f}\n¿Con cuánto paga el cliente?", minvalue=0.0)
+        pago = simpledialog.askfloat("Liquidar", f"Cliente: {item[2]}\nSaldo pendiente: ${saldo:.2f}\n¿Con cuánto paga el cliente?", minvalue=0.0)
         if pago is None:
             return
         if pago < saldo:
             return messagebox.showwarning("Pago insuficiente", f"Faltan ${saldo - pago:.2f} para liquidar el apartado.")
 
         if self.controlador.liquidar_apartado(item[1], [{"monto": saldo, "id_metodo_pago": 1, "referencia": None}]):
-            messagebox.showinfo("Éxito", f"Apartado liquidado. Cambio: ${pago - saldo:.2f}")
+            messagebox.showinfo(MSG_EXITO, f"Apartado liquidado. Cambio: ${pago - saldo:.2f}")
             self.cargar_tabla()
 
     def cancelar_apartado(self):
         sel = self.obtener_seleccionados()
         if not sel:
-            return messagebox.showwarning("Aviso", "Marca la casilla de un apartado.")
+            return messagebox.showwarning(MSG_AVISO, "Marca la casilla de 1 apartado.")
 
         estado = str(sel[0][7]).lower()
         if estado != "pendiente":
-            return messagebox.showinfo("Aviso", f"Solo se pueden cancelar apartados pendientes (estado actual: {sel[0][7]}).")
+            return messagebox.showinfo(MSG_AVISO, f"Solo se pueden cancelar apartados pendientes (estado actual: {sel[0][7]}).")
 
-        if messagebox.askyesno("Cancelar", "El anticipo NO es reembolsable (Regla #9). El stock regresará al inventario. ¿Continuar?"):
+        if messagebox.askyesno("Cancelar", f"¿Cancelar el apartado #{sel[0][1]} de {sel[0][2]}?\nEl anticipo NO es reembolsable (Regla #9). El stock regresará al inventario."):
             ok, msg = self.controlador.cancelar_apartado(sel[0][1])
             if ok:
-                messagebox.showinfo("Éxito", msg)
+                messagebox.showinfo(MSG_EXITO, msg)
                 self.cargar_tabla()
             else:
                 messagebox.showerror("Error", msg)
@@ -157,13 +172,13 @@ class PanelApartados(tk.Frame):
         tabla_c = ttk.Treeview(modal, columns=("PROD", "CANT", "SUBTOTAL"), show="headings", height=5)
         tabla_c.heading("PROD", text="Producto")
         tabla_c.heading("CANT", text="Cant")
-        tabla_c.heading("SUBTOTAL", text="Subtotal")
+        tabla_c.heading("SUBTOTAL", text="Importe")
         tabla_c.column("PROD", width=220)
         tabla_c.column("CANT", width=55, anchor="center")
         tabla_c.column("SUBTOTAL", width=85, anchor="center")
         tabla_c.pack(fill="x", padx=20, pady=8)
 
-        lbl_totales = tk.Label(modal, text="Total con IVA: $0.00  |  Anticipo (50%): $0.00", font=("Arial", 9, "bold"), fg="#27AE60")
+        lbl_totales = tk.Label(modal, text="Total (IVA incl.): $0.00  |  Anticipo (50%): $0.00", font=("Arial", 9, "bold"), fg="#27AE60")
         lbl_totales.pack(pady=(0, 8))
 
         tk.Button(
@@ -202,18 +217,15 @@ class PanelApartados(tk.Frame):
         tabla_c.insert("", "end", values=(prod["nombre"], cant, f"${sub:.2f}"))
         e_cant.delete(0, "end")
 
-        subtotal = round(sum(a["precio_unitario"] * a["cantidad"] for a in self.carrito), 2)
-        total = round(subtotal + round(subtotal * 0.16, 2), 2)
+        total = round(sum(a["precio_unitario"] * a["cantidad"] for a in self.carrito), 2)
         anticipo = round(total * 0.50, 2)
-        lbl_totales.config(text=f"Total con IVA: ${total:.2f}  |  Anticipo (50%): ${anticipo:.2f}")
+        lbl_totales.config(text=f"Total (IVA incl.): ${total:.2f}  |  Anticipo (50%): ${anticipo:.2f}")
 
     def _guardar_apartado(self, modal, e_nombre, e_tel, e_fecha, cmb_metodo):
         if not e_nombre.get().strip() or not self.carrito:
-            return messagebox.showwarning("Aviso", "Faltan datos o productos.", parent=modal)
+            return messagebox.showwarning(MSG_AVISO, "Faltan datos o productos.", parent=modal)
 
-        subtotal = round(sum(a["precio_unitario"] * a["cantidad"] for a in self.carrito), 2)
-        impuesto = round(subtotal * 0.16, 2)
-        total = round(subtotal + impuesto, 2)
+        total = round(sum(a["precio_unitario"] * a["cantidad"] for a in self.carrito), 2)
         anticipo = round(total * 0.50, 2)
 
         metodo_seleccionado = cmb_metodo.get()
@@ -231,8 +243,8 @@ class PanelApartados(tk.Frame):
 
         if ok:
             messagebox.showinfo(
-                "Éxito",
-                f"{msg}\nTotal con IVA: ${total:.2f}\nCobrar anticipo (50%): ${anticipo:.2f}",
+                MSG_EXITO,
+                f"{msg}\nTotal (IVA incl.): ${total:.2f}\nCobrar anticipo (50%): ${anticipo:.2f}",
                 parent=modal,
             )
             modal.destroy()

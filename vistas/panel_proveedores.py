@@ -29,7 +29,7 @@ class PanelProveedores(tk.Frame):
 
         frame_buscar = tk.Frame(self, bg=estilos.FONDO)
         frame_buscar.pack(fill="x", padx=20, pady=(0, 6))
-        tk.Label(frame_buscar, text="Buscar proveedor:", bg=estilos.FONDO, font=("Arial", 9, "bold")).pack(side="left")
+        tk.Label(frame_buscar, text="Buscar proveedor (Inicio):", bg=estilos.FONDO, font=("Arial", 9, "bold")).pack(side="left")
         self.e_buscar = tk.Entry(frame_buscar, width=32)
         self.e_buscar.pack(side="left", padx=8)
         self.e_buscar.bind("<KeyRelease>", lambda e: self.refrescar())
@@ -68,7 +68,7 @@ class PanelProveedores(tk.Frame):
             nombre = str(p.get("nombre") or "")
             tel = str(p.get("telefono") or "")
             correo = str(p.get("correo") or "")
-            if texto and texto not in nombre.lower() and texto not in tel.lower() and texto not in correo.lower():
+            if texto and not nombre.lower().startswith(texto):
                 continue
             self.tabla.insert("", "end", values=("☐", p["id"], nombre, tel, correo))
 
@@ -76,6 +76,9 @@ class PanelProveedores(tk.Frame):
         sel = self.obtener_seleccionados()
         if not sel:
             messagebox.showwarning(MSG_AVISO, "Marca la casilla del proveedor que deseas editar.")
+            return
+        if len(sel) > 1:
+            messagebox.showwarning(MSG_AVISO, "Solo puedes seleccionar 1 proveedor a la vez.")
             return
         fila = sel[0]
         proveedor = {"id": fila[1], "nombre": fila[2], "telefono": fila[3], "correo": fila[4]}
@@ -124,6 +127,9 @@ class PanelProveedores(tk.Frame):
         sel = self.obtener_seleccionados()
         if not sel:
             messagebox.showwarning(MSG_AVISO, "Marca la casilla del proveedor a eliminar.")
+            return
+        if len(sel) > 1:
+            messagebox.showwarning(MSG_AVISO, "Solo puedes seleccionar 1 proveedor a la vez.")
             return
 
         id_prov, nombre_prov = sel[0][1], sel[0][2]
@@ -206,32 +212,89 @@ class PanelProveedores(tk.Frame):
         tk.Button(self.modal, text="+ AGREGAR AL PEDIDO", bg="#F1C40F", command=self._agregar_al_carrito).pack(pady=5)
         tk.Button(self.modal, text="GUARDAR PEDIDO", bg="#27AE60", fg="white", command=self._guardar_pedido).pack(pady=15)
 
+    def _cargar_tabla_pedidos(self, tabla):
+        for row in tabla.get_children():
+            tabla.delete(row)
+        for p in self.controlador.obtener_pedidos_activos():
+            tabla.insert("", "end", values=(
+                "☐",
+                p["id_pedido"],
+                p["proveedor"],
+                p["productos"],
+                int(p["total_piezas"]),
+                f"${float(p['total']):.2f}",
+            ))
+
+    def _toggle_pedido(self, event, tabla):
+        fila = tabla.identify_row(event.y)
+        if not fila:
+            return
+        vals_click = list(tabla.item(fila, "values"))
+        estaba_marcado = vals_click[0] == "☑"
+
+        for iid in tabla.get_children():
+            vals = list(tabla.item(iid, "values"))
+            vals[0] = "☐"
+            tabla.item(iid, values=vals, tags=())
+
+        if not estaba_marcado:
+            vals_click[0] = "☑"
+            tabla.item(fila, values=vals_click, tags=("marcado",))
+
     def _recibir_mercancia(self, tabla, modal):
-        sel = tabla.selection()
-        if sel:
-            id_p = tabla.item(sel[0])["values"][0]
-            if self.controlador.recibir_pedido(id_p):
-                messagebox.showinfo(MSG_EXITO, "Mercancía recibida y stock actualizado.")
-                modal.destroy()
+        seleccionados = [tabla.item(i)["values"] for i in tabla.get_children() if tabla.item(i)["values"][0] == "☑"]
+        if not seleccionados:
+            messagebox.showwarning(MSG_AVISO, "Marca la casilla [ ] del pedido que llegó del proveedor.", parent=modal)
+            return
+
+        pedido = seleccionados[0]
+        id_p, proveedor, piezas = pedido[1], pedido[2], pedido[4]
+        if not messagebox.askyesno(
+            "Confirmar recepción",
+            f"¿Confirmas que llegó el pedido #{id_p} de '{proveedor}'?\n\nSe sumarán {piezas} piezas automáticamente a tu inventario.",
+            parent=modal,
+        ):
+            return
+
+        ok, msg = self.controlador.recibir_pedido(id_p)
+        if ok:
+            messagebox.showinfo(MSG_EXITO, msg, parent=modal)
+            self._cargar_tabla_pedidos(tabla)
+        else:
+            messagebox.showerror(MSG_ERROR, msg, parent=modal)
 
     def ver_pedidos(self):
         modal = tk.Toplevel(self)
-        modal.geometry("600x400")
-        modal.title("Pedidos Activos")
+        modal.geometry("820x460")
+        modal.title("Pedidos Activos (Pendientes de Recibir)")
+        modal.grab_set()
 
-        tabla = ttk.Treeview(modal, columns=("ID", "PROD", "CANT", "TOTAL"), show="headings")
-        for c in ("ID", "PROD", "CANT", "TOTAL"):
+        tk.Label(
+            modal,
+            text="Marca la casilla [ ] del pedido que acaba de entregar el proveedor y presiona RECIBIR MERCANCÍA para sumar el stock al inventario.",
+            fg="#444444",
+            font=("Arial", 9),
+            wraplength=780,
+        ).pack(padx=12, pady=(10, 4))
+
+        cols = ("SEL", "ID", "PROVEEDOR", "PRODUCTOS", "PIEZAS", "TOTAL")
+        tabla = ttk.Treeview(modal, columns=cols, show="headings")
+        tabla.heading("SEL", text="[ ]")
+        tabla.column("SEL", width=38, anchor="center", stretch=False)
+
+        anchos = {"ID": 55, "PROVEEDOR": 180, "PRODUCTOS": 340, "PIEZAS": 65, "TOTAL": 95}
+        for c in cols[1:]:
             tabla.heading(c, text=c)
-        tabla.column("ID", width=80, anchor="center")
-        tabla.column("PROD", width=300)
-        tabla.column("CANT", width=80, anchor="center")
-        tabla.column("TOTAL", width=100, anchor="center")
-        tabla.pack(fill="both", expand=True, padx=10, pady=10)
+            tabla.column(c, width=anchos[c], anchor="w" if c in ("PROVEEDOR", "PRODUCTOS") else "center")
 
-        for p in self.controlador.obtener_pedidos_activos():
-            tabla.insert("", "end", values=(p["id_pedido"], p["producto"], p["cantidad"], f"${float(p['subtotal']):.2f}"))
+        tabla.tag_configure("marcado", background="#D6EAF8", foreground="#1B4F72")
+        tabla.pack(fill="both", expand=True, padx=12, pady=8)
+        tabla.bind("<ButtonRelease-1>", lambda e: self._toggle_pedido(e, tabla))
+
+        self._cargar_tabla_pedidos(tabla)
 
         tk.Button(
-            modal, text="RECIBIR MERCANCÍA", bg="#27AE60", fg="white",
+            modal, text="RECIBIR MERCANCÍA (SUMAR AL INVENTARIO)", bg="#27AE60", fg="white",
+            font=("Arial", 10, "bold"), relief="flat", cursor="hand2", padx=14, pady=6,
             command=lambda: self._recibir_mercancia(tabla, modal),
-        ).pack(pady=10)
+        ).pack(pady=(4, 12))

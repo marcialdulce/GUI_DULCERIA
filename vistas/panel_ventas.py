@@ -13,6 +13,7 @@ class PanelVentas(tk.Frame):
         self.modo_punto_venta = modo_punto_venta
         self.ir_a_cobros = ir_a_cobros
         self._productos_filtrados = []
+        self._producto_marcado = None
 
         contenedor_principal = tk.Frame(self, bg=estilos.FONDO)
         contenedor_principal.pack(fill="both", expand=True, padx=15, pady=15)
@@ -27,7 +28,7 @@ class PanelVentas(tk.Frame):
 
         tk.Label(
             barra_busqueda,
-            text="BUSCAR (Nombre / Marca / Código):",
+            text="BUSCAR (Inicio nombre / Código):",
             bg="#3A8D96",
             fg=estilos.BLANCO,
             font=("Arial", 9, "bold"),
@@ -56,16 +57,23 @@ class PanelVentas(tk.Frame):
         panel_der = tk.Frame(contenedor_principal, bg="#F4F4F4", bd=1, relief="solid")
         panel_der.pack(side="right", fill="both", expand=True, padx=(10, 0))
 
-        tk.Label(panel_der, text="TICKET DE VENTA", bg="#F4F4F4", font=("Arial", 10, "bold")).pack(pady=(10, 6))
+        tk.Label(panel_der, text="TICKET DE VENTA (Marca [ ] para editar)", bg="#F4F4F4", font=("Arial", 10, "bold")).pack(pady=(10, 6))
 
-        columnas = ("PRODUCTO", "CANTIDAD", "PRECIO")
+        columnas = ("SEL", "PRODUCTO", "CANTIDAD", "PRECIO")
         self.tabla_ticket = ttk.Treeview(panel_der, columns=columnas, show="headings", height=8)
-        anchos = {"PRODUCTO": 190, "CANTIDAD": 75, "PRECIO": 95}
-        for col in columnas:
+        self.tabla_ticket.heading("SEL", text="[ ]")
+        self.tabla_ticket.column("SEL", width=38, anchor="center", stretch=False)
+
+        anchos = {"PRODUCTO": 180, "CANTIDAD": 70, "PRECIO": 85}
+        for col in columnas[1:]:
             self.tabla_ticket.heading(col, text=col)
             self.tabla_ticket.column(col, width=anchos[col], anchor="w" if col == "PRODUCTO" else "center")
-        self.tabla_ticket.pack(fill="both", expand=True, padx=10)
 
+        self.tabla_ticket.tag_configure("marcado", background="#D6EAF8", foreground="#1B4F72")
+        self.tabla_ticket.pack(fill="both", expand=True, padx=10)
+        self.tabla_ticket.bind("<ButtonRelease-1>", self._toggle_seleccion_ticket)
+
+        # Controles de edición individual del carrito
         frame_editar = tk.Frame(panel_der, bg="#F4F4F4")
         frame_editar.pack(fill="x", padx=10, pady=(8, 4))
 
@@ -87,18 +95,19 @@ class PanelVentas(tk.Frame):
             command=self._quitar_seleccionado,
         ).pack(side="right")
 
+        # Desglose con IVA incluido
         frame_desglose = tk.Frame(panel_der, bg="#F4F4F4")
         frame_desglose.pack(fill="x", padx=20, pady=(10, 8))
 
         fila_sub = tk.Frame(frame_desglose, bg="#F4F4F4")
         fila_sub.pack(fill="x")
-        tk.Label(fila_sub, text="Subtotal:", bg="#F4F4F4", fg="#555555", font=("Arial", 10)).pack(side="left")
+        tk.Label(fila_sub, text="Subtotal (sin IVA):", bg="#F4F4F4", fg="#555555", font=("Arial", 10)).pack(side="left")
         self.label_subtotal = tk.Label(fila_sub, text="$0.00", bg="#F4F4F4", fg="#555555", font=("Arial", 10))
         self.label_subtotal.pack(side="right")
 
         fila_iva = tk.Frame(frame_desglose, bg="#F4F4F4")
         fila_iva.pack(fill="x", pady=(2, 4))
-        tk.Label(fila_iva, text="IVA (16%):", bg="#F4F4F4", fg="#555555", font=("Arial", 10)).pack(side="left")
+        tk.Label(fila_iva, text="IVA incluido (16%):", bg="#F4F4F4", fg="#555555", font=("Arial", 10)).pack(side="left")
         self.label_iva = tk.Label(fila_iva, text="$0.00", bg="#F4F4F4", fg="#555555", font=("Arial", 10))
         self.label_iva.pack(side="right")
 
@@ -106,7 +115,7 @@ class PanelVentas(tk.Frame):
 
         fila_total = tk.Frame(frame_desglose, bg="#F4F4F4")
         fila_total.pack(fill="x")
-        tk.Label(fila_total, text="TOTAL", bg="#F4F4F4", font=("Arial", 12, "bold")).pack(side="left")
+        tk.Label(fila_total, text="TOTAL (IVA incl.)", bg="#F4F4F4", font=("Arial", 12, "bold")).pack(side="left")
         self.label_total = tk.Label(fila_total, text="$0.00", bg="#F4F4F4", fg="#27AE60", font=("Arial", 12, "bold"))
         self.label_total.pack(side="right")
 
@@ -123,6 +132,27 @@ class PanelVentas(tk.Frame):
         ).pack(fill="x", padx=15, pady=(0, 12))
 
         self.refrescar_pantalla()
+
+    def _toggle_seleccion_ticket(self, event):
+        """Marca con ☑ únicamente la fila clickeada y desmarca las demás."""
+        fila_id = self.tabla_ticket.identify_row(event.y)
+        if not fila_id:
+            return
+
+        vals_click = list(self.tabla_ticket.item(fila_id, "values"))
+        estaba_marcado = vals_click[0] == "☑"
+
+        for iid in self.tabla_ticket.get_children():
+            vals = list(self.tabla_ticket.item(iid, "values"))
+            vals[0] = "☐"
+            self.tabla_ticket.item(iid, values=vals, tags=())
+
+        if estaba_marcado:
+            self._producto_marcado = None
+        else:
+            vals_click[0] = "☑"
+            self.tabla_ticket.item(fila_id, values=vals_click, tags=("marcado",))
+            self._producto_marcado = vals_click[1]
 
     def _programar_busqueda(self, event=None):
         if self._id_busqueda is not None:
@@ -159,9 +189,8 @@ class PanelVentas(tk.Frame):
         if texto:
             productos_disponibles = [
                 p for p in productos_disponibles
-                if texto in p["nombre"].lower()
-                or texto in (p.get("marca") or "").lower()
-                or texto in str(p.get("codigo_barras") or "").lower()
+                if p["nombre"].lower().startswith(texto)
+                or str(p.get("codigo_barras") or "").lower().startswith(texto)
             ]
 
         self._productos_filtrados = productos_disponibles
@@ -172,7 +201,7 @@ class PanelVentas(tk.Frame):
         if not productos_disponibles:
             tk.Label(
                 self.frame_lista,
-                text="No se encontraron productos con ese criterio.",
+                text="No se encontraron productos que inicien con ese texto.",
                 bg="#EAEAEA",
                 fg="#666666",
                 font=("Arial", 9, "italic"),
@@ -234,18 +263,18 @@ class PanelVentas(tk.Frame):
 
         if self.controlador.procesar_agregar(producto, cantidad_pedida):
             _, carrito, _ = self.controlador.obtener_datos_ventas()
-            self.dibujar_ticket(carrito)
+            self.dibujar_ticket(carrito, mantener_marcado=self._producto_marcado)
 
-    def _nombre_seleccionado(self):
-        seleccion = self.tabla_ticket.selection()
-        if not seleccion:
-            messagebox.showwarning("Selección", "Selecciona un artículo de la tabla del ticket.")
-            return None
-        valores = self.tabla_ticket.item(seleccion[0], "values")
-        return valores[0] if valores else None
+    def _nombre_marcado(self):
+        for iid in self.tabla_ticket.get_children():
+            vals = self.tabla_ticket.item(iid, "values")
+            if vals and vals[0] == "☑":
+                return vals[1]
+        messagebox.showwarning("Selección", "Marca la casilla [ ] del artículo en el ticket.")
+        return None
 
     def _modificar_seleccionado(self, delta):
-        nombre = self._nombre_seleccionado()
+        nombre = self._nombre_marcado()
         if not nombre:
             return
         ok, msg = self.controlador.actualizar_cantidad_ticket(nombre, delta)
@@ -253,13 +282,15 @@ class PanelVentas(tk.Frame):
             messagebox.showwarning("Stock", msg)
             return
         _, carrito, _ = self.controlador.obtener_datos_ventas()
-        self.dibujar_ticket(carrito, mantener_seleccion=nombre if msg != "eliminado" else None)
+        self._producto_marcado = None if msg == "eliminado" else nombre
+        self.dibujar_ticket(carrito, mantener_marcado=self._producto_marcado)
 
     def _quitar_seleccionado(self):
-        nombre = self._nombre_seleccionado()
+        nombre = self._nombre_marcado()
         if not nombre:
             return
         self.controlador.quitar_del_ticket(nombre)
+        self._producto_marcado = None
         _, carrito, _ = self.controlador.obtener_datos_ventas()
         self.dibujar_ticket(carrito)
 
@@ -271,21 +302,25 @@ class PanelVentas(tk.Frame):
         if self.ir_a_cobros:
             self.ir_a_cobros()
 
-    def dibujar_ticket(self, carrito, mantener_seleccion=None):
+    def dibujar_ticket(self, carrito, mantener_marcado=None):
         for fila in self.tabla_ticket.get_children():
             self.tabla_ticket.delete(fila)
 
-        item_a_seleccionar = None
+        encontrado = False
         for item in carrito:
             nombre_prod = item.get("producto") or item.get("nombre") or "Desconocido"
-            iid = self.tabla_ticket.insert(
-                "", "end", values=(nombre_prod, item["cantidad"], f"${float(item['subtotal']):.2f}")
+            es_marcado = bool(mantener_marcado and nombre_prod == mantener_marcado)
+            if es_marcado:
+                encontrado = True
+            self.tabla_ticket.insert(
+                "",
+                "end",
+                values=("☑" if es_marcado else "☐", nombre_prod, item["cantidad"], f"${float(item['subtotal']):.2f}"),
+                tags=("marcado",) if es_marcado else (),
             )
-            if mantener_seleccion and nombre_prod == mantener_seleccion:
-                item_a_seleccionar = iid
 
-        if item_a_seleccionar:
-            self.tabla_ticket.selection_set(item_a_seleccionar)
+        if not encontrado:
+            self._producto_marcado = None
 
         subtotal, iva, total = self.controlador.obtener_desglose_ticket()
         self.label_subtotal.config(text=f"${subtotal:.2f}")
@@ -295,13 +330,14 @@ class PanelVentas(tk.Frame):
     def refrescar_pantalla(self):
         productos, carrito, _ = self.controlador.obtener_datos_ventas()
         self.dibujar_catalogo(productos)
-        self.dibujar_ticket(carrito)
+        self.dibujar_ticket(carrito, mantener_marcado=self._producto_marcado)
 
     def limpiar_carrito(self):
         _, carrito, _ = self.controlador.obtener_datos_ventas()
         if not carrito:
             return
         if messagebox.askyesno("Limpiar Carrito", "¿Estás seguro de vaciar el carrito actual? (Aún no se ha cobrado)"):
+            self._producto_marcado = None
             self.controlador.vaciar_ticket_actual()
             self.refrescar_pantalla()
 

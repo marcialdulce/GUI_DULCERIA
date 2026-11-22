@@ -5,6 +5,7 @@ from vistas import estilos
 MSG_EXITO = "Éxito"
 MSG_ERROR = "Error"
 MSG_AVISO = "Aviso"
+MSG_SOLO_UNO = "Solo puedes seleccionar 1 producto a la vez."
 
 
 class PanelInventario(tk.Frame):
@@ -19,7 +20,7 @@ class PanelInventario(tk.Frame):
         frame_filtros = tk.Frame(self, bg="#3A8D96")
         frame_filtros.pack(fill="x", pady=4)
 
-        tk.Label(frame_filtros, text="BUSCAR:", bg="#3A8D96", fg="white", font=("Arial", 9, "bold")).pack(side="left", padx=10)
+        tk.Label(frame_filtros, text="BUSCAR (Inicio):", bg="#3A8D96", fg="white", font=("Arial", 9, "bold")).pack(side="left", padx=10)
         self.e_buscar = tk.Entry(frame_filtros, width=30)
         self.e_buscar.pack(side="left", padx=5, pady=4)
         self.e_buscar.bind("<KeyRelease>", lambda e: self.notificar_filtros())
@@ -48,7 +49,6 @@ class PanelInventario(tk.Frame):
             self.tabla.heading(c, text=c)
             self.tabla.column(c, anchor="w" if c == "PRODUCTO" else "center", width=anchos[c])
 
-        # Colores de alerta visual según nivel de stock
         self.tabla.tag_configure("agotado", background="#FADBD8", foreground="#922B21")
         self.tabla.tag_configure("bajo", background="#FCF3CF", foreground="#9A7D0A")
         self.tabla.tag_configure("ok", background="#FFFFFF", foreground="#222222")
@@ -66,6 +66,16 @@ class PanelInventario(tk.Frame):
 
     def obtener_seleccionados(self):
         return [self.tabla.item(i)["values"] for i in self.tabla.get_children() if self.tabla.item(i)["values"][0] == "☑"]
+
+    def _validar_unico_seleccionado(self, mensaje_vacio):
+        sel = self.obtener_seleccionados()
+        if not sel:
+            messagebox.showwarning(MSG_AVISO, mensaje_vacio)
+            return None
+        if len(sel) > 1:
+            messagebox.showwarning(MSG_AVISO, MSG_SOLO_UNO)
+            return None
+        return sel[0]
 
     def notificar_filtros(self):
         datos = self.controlador.obtener_inventario_filtrado(self.e_buscar.get().lower(), "Todas", "Todas")
@@ -95,11 +105,10 @@ class PanelInventario(tk.Frame):
             )
 
     def abrir_merma(self):
-        sel = self.obtener_seleccionados()
-        if not sel:
-            return messagebox.showwarning(MSG_AVISO, "Marca la casilla de un producto.")
+        item = self._validar_unico_seleccionado("Marca la casilla de 1 producto.")
+        if not item:
+            return
 
-        item = sel[0]
         id_prod, nombre = item[1], item[2]
         cant = simpledialog.askinteger("Merma", f"¿Unidades de '{nombre}' perdidas/dañadas?", minvalue=1)
         if cant and cant > 0:
@@ -114,19 +123,19 @@ class PanelInventario(tk.Frame):
         return next((p for p in self.controlador.modelo.inventario if int(p["id_producto"]) == int(id_prod)), None)
 
     def editar_seleccionado(self):
-        sel = self.obtener_seleccionados()
-        if not sel:
-            return messagebox.showwarning(MSG_AVISO, "Marca la casilla de un producto.")
-        prod = self._producto_por_id(sel[0][1])
+        item = self._validar_unico_seleccionado("Marca la casilla del producto que deseas editar.")
+        if not item:
+            return
+        prod = self._producto_por_id(item[1])
         if prod:
             self.abrir_formulario(prod)
 
     def eliminar_seleccionado(self):
-        sel = self.obtener_seleccionados()
-        if not sel:
-            return messagebox.showwarning(MSG_AVISO, "Marca la casilla del producto a dar de baja.")
+        item = self._validar_unico_seleccionado("Marca la casilla del producto a dar de baja.")
+        if not item:
+            return
 
-        id_prod, nombre = sel[0][1], sel[0][2]
+        id_prod, nombre = item[1], item[2]
         if not messagebox.askyesno("Confirmar", f"¿Dar de baja '{nombre}'?\nEl producto quedará inactivo."):
             return
         ok, msg = self.controlador.eliminar_producto(id_prod)
@@ -163,7 +172,7 @@ class PanelInventario(tk.Frame):
         es_nuevo = producto is None
         modal = tk.Toplevel(self)
         modal.title("Nuevo Producto" if es_nuevo else "Editar Producto")
-        modal.geometry("420x600")
+        modal.geometry("420x640")
         modal.grab_set()
 
         p = producto or {}
@@ -176,7 +185,8 @@ class PanelInventario(tk.Frame):
 
         self._agregar_campo_texto(modal, entradas, "Código de barras:", "codigo_barras", p.get("codigo_barras", ""))
         self._agregar_campo_texto(modal, entradas, "Nombre del dulce:", "nombre_dulce", p.get("nombre", ""))
-        self._agregar_campo_texto(modal, entradas, "Precio venta:", "precio_venta", p.get("precio", ""))
+        self._agregar_campo_texto(modal, entradas, "Precio venta (IVA incluido):", "precio_venta", p.get("precio", ""))
+        self._agregar_campo_texto(modal, entradas, "Stock actual:", "stock_actual", p.get("stock", 0))
         self._agregar_campo_texto(modal, entradas, "Stock mínimo:", "stock_minimo", p.get("stock_minimo", 5))
 
         self._agregar_combo(modal, entradas, "Marca:", "id_marca", marcas, p.get("id_marca"))
@@ -187,13 +197,13 @@ class PanelInventario(tk.Frame):
         tk.Button(
             modal, text="GUARDAR", bg="#27AE60", fg="white", font=("Arial", 11, "bold"),
             command=lambda: self._procesar_guardado(modal, es_nuevo, producto, entradas),
-        ).pack(pady=20, fill="x", padx=15)
+        ).pack(pady=18, fill="x", padx=15)
 
     def _parsear_entry(self, key, val):
         raw = val.strip()
         if key == "precio_venta":
             return float(raw) if raw else 0.0
-        if key == "stock_minimo":
+        if key in ("stock_minimo", "stock_actual"):
             return int(raw) if raw else 0
         return raw
 
@@ -225,4 +235,4 @@ class PanelInventario(tk.Frame):
             else:
                 messagebox.showerror(MSG_ERROR, msg)
         except ValueError:
-            messagebox.showerror("Datos inválidos", "Revisa que el precio y el stock sean números válidos.")
+            messagebox.showerror("Datos inválidos", "Revisa que el precio, el stock actual y el stock mínimo sean números válidos.")

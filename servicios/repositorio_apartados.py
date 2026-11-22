@@ -19,9 +19,10 @@ class RepositorioApartados:
         try:
             cursor = conexion.cursor()
 
-            subtotal = round(sum(int(a["cantidad"]) * float(a["precio_unitario"]) for a in articulos), 2)
-            impuesto = round(subtotal * 0.16, 2)
-
+            total = round(sum(int(a["cantidad"]) * float(a["precio_unitario"]) for a in articulos), 2)
+            subtotal = round(total / 1.16, 2)
+            impuesto = round(total - subtotal, 2)
+            
             cursor.execute("""
                 INSERT INTO apartados (nombre_cliente, telefono_cliente, fecha_entrega,
                                        subtotal, impuesto, estado, id_corte_caja)

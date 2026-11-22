@@ -16,20 +16,19 @@ class RepositorioVentas:
         return f"{prefijo}-{n:0{ancho}d}"
 
     def registrar(self, carrito, pagos, id_turno, datos_factura=None):
+        if not id_turno:
+            raise ValueError("No hay un turno de caja abierto para registrar esta venta.")
+
         conexion = conectar_bd()
-        if not conexion: 
+        if not conexion:
             raise ConnectionError("No se pudo conectar a la base de datos.")
         cursor = None
         try:
             cursor = conexion.cursor()
 
-            if not id_turno:
-                cursor.execute("SELECT MAX(id_corte_caja) FROM cortes_caja")
-                r = cursor.fetchone()
-                id_turno = r[0] if (r and r[0]) else 1
-
-            subtotal = sum(item["subtotal"] for item in carrito)
-            impuesto = subtotal * 0.16
+            subtotal = round(sum(float(item["subtotal"]) for item in carrito), 2)
+            impuesto = round(subtotal * 0.16, 2)
+            total = round(subtotal + impuesto, 2)
             folio = self._siguiente_folio(cursor, "ventas", "VTA", 6)
 
             cursor.execute("""
@@ -114,8 +113,9 @@ class RepositorioVentas:
             conexion.rollback()
             raise e
         finally:
-            if cursor:
-                cursor.close()
+            total = round(sum(float(item["subtotal"]) for item in carrito), 2)
+            subtotal = round(total / 1.16, 2)
+            impuesto = round(total - subtotal, 2)
             if conexion.is_connected():
                 conexion.close()
                 

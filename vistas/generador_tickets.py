@@ -82,19 +82,20 @@ def generar_ticket_pdf(
     c.setFont("Helvetica", 9)
     y = 608
 
-    subtotal_venta = 0.0
+    total_calculado = 0.0
     for item in carrito_comprado:
         cantidad = int(item["cantidad"])
-        importe_base = float(item["subtotal"])
-        precio_base = float(item.get("precio_unitario", importe_base / max(cantidad, 1)))
-        subtotal_venta += importe_base
+        importe_con_iva = float(item["subtotal"])
+        importe_sin_iva = round(importe_con_iva / 1.16, 2)
+        precio_sin_iva = round((importe_con_iva / max(cantidad, 1)) / 1.16, 2)
+        total_calculado += importe_con_iva
 
         c.drawString(40, y, "50161800")
         c.drawString(100, y, str(cantidad))
         c.drawString(140, y, "H87")
         c.drawString(180, y, str(item["producto"])[:36])
-        c.drawString(400, y, f"${precio_base:.2f}")
-        c.drawString(480, y, f"${importe_base:.2f}")
+        c.drawString(400, y, f"${precio_sin_iva:.2f}")
+        c.drawString(480, y, f"${importe_sin_iva:.2f}")
         y -= 18
 
         if y < 140:
@@ -102,10 +103,10 @@ def generar_ticket_pdf(
             y = 740
             c.setFont("Helvetica", 9)
 
-    subtotal_venta = round(subtotal_venta, 2)
-    iva_venta = round(subtotal_venta * 0.16, 2)
-    total_calculado = round(subtotal_venta + iva_venta, 2)
-
+    total_final = round(float(total), 2) if total is not None else round(total_calculado, 2)
+    subtotal_venta = round(total_final / 1.16, 2)
+    iva_venta = round(total_final - subtotal_venta, 2)
+    
     c.line(40, y, 560, y)
     y -= 20
 
@@ -129,7 +130,7 @@ def generar_ticket_pdf(
 
     c.setFont("Helvetica-Bold", 11)
     c.drawString(400, y - 35, "TOTAL:")
-    c.drawString(480, y - 35, f"${total_calculado:.2f}")
+    c.drawString(480, y - 35, f"${total_final:.2f}")
 
     c.setFont("Helvetica", 10)
     c.drawString(400, y - 55, "Pagado:")

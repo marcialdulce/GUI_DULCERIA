@@ -17,7 +17,7 @@ class PanelInicio(tk.Frame):
         productos_disponibles = [p for p in inventario if p["stock"] > 0]
         productos_bajo_stock = sorted(inventario, key=lambda p: p["stock"])[:5]
 
-        def crear_tarjeta(titulo, peso=1):
+        def crear_tarjeta(titulo):
             tarjeta_externa = tk.Frame(contenedor, bg="#D95A78")
             tarjeta_externa.pack(side="left", fill="both", expand=True, padx=10)
 
