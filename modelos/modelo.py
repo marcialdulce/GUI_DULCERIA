@@ -126,61 +126,68 @@ class ModeloDulceria:
         con = conectar_bd()
         try:
             cur = con.cursor(dictionary=True)
-            
-            # 1. Obtener el stock actual del producto antes de eliminarlo
-            cur.execute("SELECT stock_resultante FROM movimientos_inventario WHERE id_producto=%s ORDER BY id_movimiento_inventario DESC LIMIT 1", (id_producto,))
+
+            cur.execute("""
+                SELECT stock_resultante
+                FROM movimientos_inventario
+                WHERE id_producto=%s
+                ORDER BY id_movimiento_inventario DESC
+                LIMIT 1
+            """, (id_producto,))
             res = cur.fetchone()
             stock_actual = res["stock_resultante"] if res else 0
-            
-            # 2. Si hay stock, registrar un ajuste para vaciarlo a cero
+
             if stock_actual > 0:
                 cur.execute("""
-                    INSERT INTO movimientos_inventario (tipo, cantidad, stock_resultante, observaciones, id_producto)
-                    VALUES ('ajuste', %s, 0, 'Eliminación del producto del sistema', %s)
+                    INSERT INTO movimientos_inventario (tipo, cantidad, stock_resultante, id_producto)
+                    VALUES ('ajuste', %s, 0, %s)
                 """, (-stock_actual, id_producto))
-                
-            # 3. Cambiar el estado a 'inactivo'
+
             cur.execute("UPDATE productos SET estado='inactivo' WHERE id_producto=%s", (id_producto,))
-            
+
             con.commit()
             self.invalidar_inventario()
-            # AQUÍ ESTÁ LA CLAVE: Devolvemos True Y el mensaje que espera la interF z
             return True, "Producto eliminado y stock ajustado a 0 correctamente."
         except Exception as e:
             con.rollback()
-            # Devolvemos False Y el mensaje de error
             return False, f"Error al eliminar producto: {str(e)}"
         finally:
             if con.is_connected():
                 con.close()
 
-    def registrar_merma(self, id_producto, cantidad):
+    def registrar_merma(self, id_producto, cantidad, motivo="Merma manual"):
         con = conectar_bd()
         try:
             cur = con.cursor(dictionary=True)
-            cur.execute("""SELECT stock_resultante FROM movimientos_inventario
-                           WHERE id_producto=%s ORDER BY id_movimiento_inventario DESC LIMIT 1""",
-                        (id_producto,))
+            cur.execute("""
+                SELECT stock_resultante
+                FROM movimientos_inventario
+                WHERE id_producto=%s
+                ORDER BY id_movimiento_inventario DESC
+                LIMIT 1
+            """, (id_producto,))
             res = cur.fetchone()
             stock_actual = res["stock_resultante"] if res else 0
             if cantidad > stock_actual:
                 return False, "No puedes mermar más de lo que tienes en stock."
-            
+
             nuevo_stock = stock_actual - cantidad
-            # Se registra exactamente como 'ajuste' con cantidad negativa
             cur.execute("""
                 INSERT INTO movimientos_inventario (tipo, cantidad, stock_resultante, id_producto)
                 VALUES ('ajuste', %s, %s, %s)
             """, (-cantidad, nuevo_stock, id_producto))
-            
+
             con.commit()
             self.invalidar_inventario()
-            return True, "Merma registrada correctamente."
+            return True, f"Merma registrada correctamente ({motivo})."
         except Exception as e:
             con.rollback()
             return False, str(e)
         finally:
-            if con.is_connected(): con.close()
+            if con.is_connected():
+                con.close()
+
+    
 
     def agregar_al_ticket(self, nombre_producto, cantidad):
         prod = next((p for p in self.inventario if p["nombre"] == nombre_producto), None)
@@ -202,6 +209,41 @@ class ModeloDulceria:
     def calcular_total(self):
         sub = sum(i["subtotal"] for i in self.ticket_actual)
         return sub + round(sub * 0.16, 2)
+    
+    def calcular_desglose(self):
+        subtotal = round(sum(float(i["subtotal"]) for i in self.ticket_actual), 2)
+        iva = round(subtotal * 0.16, 2)
+        total = round(subtotal + iva, 2)
+        return subtotal, iva, total
+
+    def actualizar_cantidad_ticket(self, nombre_producto, delta):
+        """Suma o resta unidades a un artículo del carrito validando stock."""
+        item = next((i for i in self.ticket_actual if i["producto"] == nombre_producto), None)
+        if not item:
+            return False, "El artículo no está en el carrito."
+
+        nueva_cantidad = int(item["cantidad"]) + int(delta)
+        if nueva_cantidad <= 0:
+            self.ticket_actual.remove(item)
+            return True, "eliminado"
+
+        if delta > 0:
+            prod = next((p for p in self.inventario if p["nombre"] == nombre_producto), None)
+            if not prod or nueva_cantidad > prod["stock"]:
+                disponible = prod["stock"] if prod else 0
+                return False, f"Stock máximo alcanzado ({disponible} disponibles)."
+
+        item["cantidad"] = nueva_cantidad
+        item["subtotal"] = round(nueva_cantidad * float(item["precio_unitario"]), 2)
+        return True, "ok"
+
+    def quitar_del_ticket(self, nombre_producto):
+        """Elimina un único artículo del carrito actual."""
+        for i, item in enumerate(self.ticket_actual):
+            if item["producto"] == nombre_producto:
+                self.ticket_actual.pop(i)
+                return True
+        return False
 
     def obtener_reporte_ganancias(self):
         totales = self._ejecutar_consulta("""
@@ -305,16 +347,41 @@ class ModeloDulceria:
             print(f"Error al eliminar proveedor: {e}")
             return False
 
+    def crear_proveedor(self, empresa, telefono, correo):
+        query = "INSERT INTO proveedores (empresa, telefono, correo) VALUES (%s, %s, %s)"
+        try:
+            self._ejecutar_consulta(query, (empresa.strip(), telefono.strip() or None, correo.strip() or None))
+            return True, "Proveedor registrado correctamente."
+        except Exception as e:
+            if "Duplicate entry" in str(e):
+                return False, f"Ya existe un proveedor registrado con el nombre '{empresa}'."
+            return False, f"Error al registrar proveedor: {e}"
+
+    def actualizar_proveedor(self, id_proveedor, empresa, telefono, correo):
+        query = "UPDATE proveedores SET empresa=%s, telefono=%s, correo=%s WHERE id_proveedor=%s"
+        try:
+            self._ejecutar_consulta(query, (empresa.strip(), telefono.strip() or None, correo.strip() or None, id_proveedor))
+            return True, "Proveedor actualizado correctamente."
+        except Exception as e:
+            if "Duplicate entry" in str(e):
+                return False, f"Ya existe otro proveedor con el nombre '{empresa}'."
+            return False, f"Error al actualizar proveedor: {e}"
+
     def obtener_apartados(self):
         return self._ejecutar_consulta("""
-            SELECT a.id_apartado, a.nombre_cliente AS nombre,
-                   DATE_FORMAT(a.fecha_entrega, '%d/%m/%Y') AS fecha, a.estado,
-                   p.nombre_dulce AS producto, da.cantidad AS unidades,
-                   a.subtotal, a.impuesto,
-                   (SELECT COALESCE(SUM(monto), 0) FROM pagos_apartados pa
-                    WHERE pa.id_apartado = a.id_apartado) AS pagado
+            SELECT a.id_apartado,
+                   a.nombre_cliente AS nombre,
+                   DATE_FORMAT(a.fecha_entrega, '%d/%m/%Y') AS fecha,
+                   a.estado,
+                   GROUP_CONCAT(CONCAT(p.nombre_dulce, ' (x', da.cantidad, ')') SEPARATOR ', ') AS producto,
+                   SUM(da.cantidad) AS unidades,
+                   a.subtotal,
+                   a.impuesto,
+                   COALESCE((SELECT SUM(pa.monto) FROM pagos_apartados pa
+                             WHERE pa.id_apartado = a.id_apartado), 0) AS pagado
             FROM apartados a
             JOIN detalles_apartados da ON a.id_apartado = da.id_apartado
             JOIN productos p ON da.id_producto = p.id_producto
-            ORDER BY a.fecha_entrega
+            GROUP BY a.id_apartado, a.nombre_cliente, a.fecha_entrega, a.estado, a.subtotal, a.impuesto
+            ORDER BY FIELD(a.estado, 'pendiente', 'liquidado', 'cancelado'), a.fecha_entrega ASC
         """, fetchall=True) or []

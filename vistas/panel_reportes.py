@@ -4,8 +4,23 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from vistas import estilos
 
-# Constante para evitar duplicación de strings (SonarQube)
 TEXTO_INICIAL_KPI = "$0.00"
+MESES = [
+    "Todos",
+    "1 - Enero",
+    "2 - Febrero",
+    "3 - Marzo",
+    "4 - Abril",
+    "5 - Mayo",
+    "6 - Junio",
+    "7 - Julio",
+    "8 - Agosto",
+    "9 - Septiembre",
+    "10 - Octubre",
+    "11 - Noviembre",
+    "12 - Diciembre",
+]
+
 
 class PanelReportes(tk.Frame):
     def __init__(self, parent, controlador):
@@ -14,11 +29,9 @@ class PanelReportes(tk.Frame):
 
         tk.Label(self, text="CENTRO DE ANÁLISIS FINANCIERO", bg="#3A8D96", fg="white", font=("Arial", 12, "bold")).pack(fill="x", pady=5)
 
-        # Crear sistema de pestañas
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Crear las dos ventanas para las pestañas
         self.tab_grafica = tk.Frame(self.notebook, bg="white")
         self.tab_tabla = tk.Frame(self.notebook, bg=estilos.FONDO)
 
@@ -29,24 +42,27 @@ class PanelReportes(tk.Frame):
         self.construir_pestaña_tabla()
 
     def construir_pestaña_grafica(self):
-        # --- BARRA DE FILTROS PARA GRÁFICA ---
         frame_filtros = tk.Frame(self.tab_grafica, bg="white")
         frame_filtros.pack(pady=10)
-        
-        tk.Label(frame_filtros, text="Mes (1-12):", bg="white", font=("Arial", 10, "bold")).pack(side="left")
-        self.e_mes = tk.Entry(frame_filtros, width=5, highlightthickness=1, highlightbackground="gray")
-        self.e_mes.pack(side="left", padx=5)
-        
-        tk.Label(frame_filtros, text="Caja:", bg="white", font=("Arial", 10, "bold")).pack(side="left", padx=(15,0))
+
+        tk.Label(frame_filtros, text="Mes:", bg="white", font=("Arial", 10, "bold")).pack(side="left")
+        self.cmb_mes = ttk.Combobox(frame_filtros, values=MESES, state="readonly", width=16)
+        self.cmb_mes.set("Todos")
+        self.cmb_mes.pack(side="left", padx=5)
+
+        tk.Label(frame_filtros, text="Caja:", bg="white", font=("Arial", 10, "bold")).pack(side="left", padx=(15, 0))
         self.cmb_caja = ttk.Combobox(frame_filtros, values=["Todas", "CAJA-01", "CAJA-02", "CAJA-03", "CAJA-04"], state="readonly", width=12)
         self.cmb_caja.set("Todas")
         self.cmb_caja.pack(side="left", padx=5)
 
-        tk.Button(frame_filtros, text="ACTUALIZAR GRÁFICA", bg="#27AE60", fg="white", font=("Arial", 9, "bold"), command=self.generar_grafica).pack(side="left", padx=20)
+        tk.Button(
+            frame_filtros, text="ACTUALIZAR GRÁFICA", bg="#27AE60", fg="white",
+            font=("Arial", 9, "bold"), relief="flat", cursor="hand2", padx=10, pady=4,
+            command=self.generar_grafica,
+        ).pack(side="left", padx=15)
 
-        # --- CONTENEDOR DE LA GRÁFICA ---
         self.frame_canvas = tk.Frame(self.tab_grafica, bg="white")
-        self.frame_canvas.pack(fill="both", expand=True, padx=20, pady=10)
+        self.frame_canvas.pack(fill="both", expand=True, padx=15, pady=(0, 10))
 
         self.generar_grafica()
 
@@ -54,86 +70,99 @@ class PanelReportes(tk.Frame):
         for widget in self.frame_canvas.winfo_children():
             widget.destroy()
 
-        mes = self.e_mes.get().strip() or None
+        mes_sel = self.cmb_mes.get()
+        mes = int(mes_sel.split(" - ")[0]) if mes_sel != "Todos" else None
         caja = self.cmb_caja.get()
         datos = self.controlador.modelo.obtener_datos_grafica(mes, caja)
 
         if not datos:
-            tk.Label(self.frame_canvas, text="No hay ventas registradas con estos filtros.", bg="white", font=("Arial", 14)).pack(pady=100)
+            tk.Label(self.frame_canvas, text="No hay ventas registradas con estos filtros.", bg="white", font=("Arial", 13)).pack(pady=80)
             return
 
         cajas = [d["numero_caja"] for d in datos]
         ingresos = [float(d["ingresos_totales"]) for d in datos]
+        max_ingreso = max(ingresos) if ingresos else 1.0
 
-        figura = Figure(figsize=(8, 5), dpi=100)
+        figura = Figure(figsize=(6.8, 3.8), dpi=95)
         ax = figura.add_subplot(111)
-        
-        colores = ['#2980B9', '#27AE60', '#F39C12', '#E74C3C']
-        barras = ax.bar(cajas, ingresos, color=colores[:len(cajas)], edgecolor='black', width=0.6)
-        
-        ax.set_title("Rendimiento e Ingresos por Caja", fontsize=16, fontweight='bold', pad=15)
-        ax.set_ylabel("Total Vendido ($)", fontsize=12)
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        
+
+        colores = ["#2980B9", "#27AE60", "#F39C12", "#E74C3C"]
+        barras = ax.bar(cajas, ingresos, color=colores[:len(cajas)], edgecolor="black", width=0.55)
+
+        ax.set_title("Rendimiento e Ingresos por Caja", fontsize=13, fontweight="bold", pad=12)
+        ax.set_ylabel("Total Vendido ($)", fontsize=10)
+        ax.set_xlabel("Caja", fontsize=10)
+        ax.set_ylim(0, max_ingreso * 1.18)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
         for barra in barras:
             altura = barra.get_height()
-            ax.text(barra.get_x() + barra.get_width()/2., altura + (max(ingresos)*0.01), 
-                    f'${altura:,.2f}', ha='center', va='bottom', fontsize=11, fontweight='bold')
+            ax.text(
+                barra.get_x() + barra.get_width() / 2.0,
+                altura + (max_ingreso * 0.02),
+                f"${altura:,.2f}",
+                ha="center",
+                va="bottom",
+                fontsize=9,
+                fontweight="bold",
+            )
+
+        figura.tight_layout()
 
         canvas = FigureCanvasTkAgg(figura, master=self.frame_canvas)
         canvas.draw()
-        canvas.get_tk_widget().pack(fill="both", expand=True, anchor="center")
+        canvas.get_tk_widget().pack(fill="both", expand=True)
 
     def construir_pestaña_tabla(self):
-        # --- RECUADROS FINANCIEROS GLOBALES ---
         frame_kpis = tk.Frame(self.tab_tabla, bg=estilos.FONDO)
         frame_kpis.pack(fill="x", pady=15, padx=20)
-        
-        # Se usa la constante TEXTO_INICIAL_KPI en lugar de "$0.00"
-        self.lbl_ingreso = tk.Label(frame_kpis, text=TEXTO_INICIAL_KPI, font=("Arial", 20, "bold"), fg="#27AE60", bg="white", width=15, relief="solid", bd=1)
-        self.lbl_ingreso.pack(side="left", padx=10, expand=True)
-        
-        self.lbl_costo = tk.Label(frame_kpis, text=TEXTO_INICIAL_KPI, font=("Arial", 20, "bold"), fg="#E74C3C", bg="white", width=15, relief="solid", bd=1)
-        self.lbl_costo.pack(side="left", padx=10, expand=True)
-        
-        self.lbl_utilidad = tk.Label(frame_kpis, text=TEXTO_INICIAL_KPI, font=("Arial", 20, "bold"), fg="#2980B9", bg="white", width=15, relief="solid", bd=1)
-        self.lbl_utilidad.pack(side="left", padx=10, expand=True)
 
-        # --- TABLA DE DESGLOSE POR PRODUCTO ---
+        self.lbl_ingreso = tk.Label(frame_kpis, text=TEXTO_INICIAL_KPI, font=("Arial", 14, "bold"), fg="#27AE60", bg="white", relief="solid", bd=1, pady=8)
+        self.lbl_ingreso.pack(side="left", padx=8, fill="x", expand=True)
+
+        self.lbl_costo = tk.Label(frame_kpis, text=TEXTO_INICIAL_KPI, font=("Arial", 14, "bold"), fg="#E74C3C", bg="white", relief="solid", bd=1, pady=8)
+        self.lbl_costo.pack(side="left", padx=8, fill="x", expand=True)
+
+        self.lbl_utilidad = tk.Label(frame_kpis, text=TEXTO_INICIAL_KPI, font=("Arial", 14, "bold"), fg="#2980B9", bg="white", relief="solid", bd=1, pady=8)
+        self.lbl_utilidad.pack(side="left", padx=8, fill="x", expand=True)
+
         cols = ("PRODUCTO", "VENDIDOS", "INGRESOS", "COSTO UNIT.", "GANANCIA")
         self.tabla = ttk.Treeview(self.tab_tabla, columns=cols, show="headings", height=12)
-        
+
         anchos = [300, 100, 120, 120, 120]
         for i, c in enumerate(cols):
             self.tabla.heading(c, text=c)
-            self.tabla.column(c, anchor="center", width=anchos[i])
-            
+            self.tabla.column(c, anchor="w" if c == "PRODUCTO" else "center", width=anchos[i])
+
         self.tabla.pack(fill="both", expand=True, padx=20, pady=10)
-        
-        tk.Button(self.tab_tabla, text="ACTUALIZAR TABLA", bg="#3A8D96", fg="white", font=("Arial", 10, "bold"), command=self.cargar_datos_tabla).pack(pady=10)
-        
+
+        tk.Button(
+            self.tab_tabla, text="ACTUALIZAR TABLA", bg="#3A8D96", fg="white",
+            font=("Arial", 10, "bold"), relief="flat", cursor="hand2", padx=12, pady=5,
+            command=self.cargar_datos_tabla,
+        ).pack(pady=10)
+
         self.cargar_datos_tabla()
 
     def cargar_datos_tabla(self):
         try:
             datos = self.controlador.obtener_reporte_ganancias()
-            
+
             self.lbl_ingreso.config(text=f"Ingresos: ${datos['ingreso_total']:,.2f}")
             self.lbl_costo.config(text=f"Costos: ${datos['costo_total']:,.2f}")
             self.lbl_utilidad.config(text=f"Utilidad: ${datos['utilidad_bruta']:,.2f}")
-            
+
             for row in self.tabla.get_children():
                 self.tabla.delete(row)
-                
+
             for p in datos["detalle"]:
                 self.tabla.insert("", "end", values=(
-                    p["nombre_dulce"], 
+                    p["nombre_dulce"],
                     p["unidades_vendidas"],
-                    f"${float(p['ingresos_totales']):,.2f}", 
+                    f"${float(p['ingresos_totales']):,.2f}",
                     f"${float(p['costo_unitario']):,.2f}",
-                    f"${float(p['ganancia_neta']):,.2f}"
+                    f"${float(p['ganancia_neta']):,.2f}",
                 ))
         except Exception as e:
-            # Se eliminó el import local que estaba aquí adentro
             messagebox.showerror("Error", f"Fallo al cargar datos: {e}")

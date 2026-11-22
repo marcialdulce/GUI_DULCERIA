@@ -39,11 +39,37 @@ class RepositorioVentas:
             id_venta = cursor.lastrowid
 
             for item in carrito:
+                cantidad = int(item["cantidad"])
+                id_prod = item["id_producto"]
+
+                cursor.execute("""
+                    SELECT stock_resultante
+                    FROM movimientos_inventario
+                    WHERE id_producto = %s
+                    ORDER BY id_movimiento_inventario DESC
+                    LIMIT 1
+                    FOR UPDATE
+                """, (id_prod,))
+                fila_stock = cursor.fetchone()
+                stock_actual = int(fila_stock[0]) if fila_stock else 0
+
+                if cantidad > stock_actual:
+                    raise ValueError(
+                        f"Stock insuficiente para '{item['producto']}'. "
+                        f"Disponible: {stock_actual}, solicitado: {cantidad}."
+                    )
+
                 cursor.execute("""
                     INSERT INTO detalles_ventas (cantidad, precio_unitario, descuento, subtotal, id_venta, id_producto)
                     VALUES (%s, %s, 0.00, %s, %s, %s)
-                """, (item["cantidad"], item["precio_unitario"], item["subtotal"],
-                      id_venta, item["id_producto"]))
+                """, (cantidad, item["precio_unitario"], item["subtotal"], id_venta, id_prod))
+                id_detalle_venta = cursor.lastrowid
+
+                nuevo_stock = stock_actual - cantidad
+                cursor.execute("""
+                    INSERT INTO movimientos_inventario (tipo, cantidad, stock_resultante, id_producto, id_detalle_venta)
+                    VALUES ('salida', %s, %s, %s, %s)
+                """, (-cantidad, nuevo_stock, id_prod, id_detalle_venta))
 
             for p in pagos:
                 cursor.execute("""
@@ -51,6 +77,7 @@ class RepositorioVentas:
                     VALUES (%s, %s, %s, %s, %s)
                 """, (p["monto"], id_venta, p["id_metodo_pago"], id_turno, p.get("referencia")))
 
+            folio_fac = None
             if datos_factura:
                 folio_fac = self._siguiente_folio(cursor, "facturas", "FAC", 4, incluir_anio=True)
                 cursor.execute("""
@@ -59,17 +86,39 @@ class RepositorioVentas:
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """, (folio_fac, datos_factura["rfc"], datos_factura["razon_social"],
                       datos_factura["regimen"], datos_factura["cp"],
-                      datos_factura["correo"], subtotal + impuesto, id_venta))
+                      datos_factura["correo"], total, id_venta))
 
             conexion.commit()
-            return folio
+
+            nombres_metodos = {1: "Efectivo", 2: "Tarjeta de débito", 3: "Tarjeta de crédito"}
+            metodos_usados = list(dict.fromkeys(
+                nombres_metodos.get(p["id_metodo_pago"], "Efectivo") for p in pagos
+            ))
+            metodo_resumen = metodos_usados[0] if len(metodos_usados) == 1 else "Pago mixto"
+            total_pagado = round(sum(float(p["monto"]) for p in pagos), 2)
+
+            return {
+                "id_venta": id_venta,
+                "folio": folio,
+                "folio_factura": folio_fac,
+                "fecha": datetime.now().strftime(FORMATO_FECHA),
+                "subtotal": subtotal,
+                "impuesto": impuesto,
+                "total": total,
+                "metodo_pago": metodo_resumen,
+                "total_pagado": total_pagado,
+                "cambio": round(max(0.0, total_pagado - total), 2),
+                "articulos": [dict(item) for item in carrito],
+            }
         except Exception as e:
             conexion.rollback()
             raise e
         finally:
-            if cursor: cursor.close()
-            if conexion.is_connected(): conexion.close()
-
+            if cursor:
+                cursor.close()
+            if conexion.is_connected():
+                conexion.close()
+                
     def efectivo_turno(self, id_corte_caja):
         conexion = conectar_bd()
         if not conexion: return 0.0
@@ -114,7 +163,6 @@ class RepositorioVentas:
                     WHERE u.username = %s)"""
                 params = [usuario_filtro]
             
-            # Corregido: Sin DATE_FORMAT de SQL, se maneja en Python
             cur.execute(f"""
                 SELECT v.id_venta, v.folio, v.fecha_hora,
                        v.subtotal, (v.subtotal + v.impuesto) AS total,
