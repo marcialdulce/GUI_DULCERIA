@@ -10,19 +10,27 @@ _pool = None
 
 def _crear_pool():
     config = {
-        "host": os.getenv("DB_HOST"),
-        "user": os.getenv("DB_USER"),
-        "password": os.getenv("DB_PASSWORD"),
+        "host": os.getenv("DB_HOST", "localhost"),
+        "port": int(os.getenv("DB_PORT", 3306)),
+        "user": os.getenv("DB_USER", "root"),
+        "password": os.getenv("DB_PASSWORD", ""),
         "database": os.getenv("DB_NAME"),
         "charset": "utf8mb4",
     }
-    if os.getenv("DB_PORT"):
-        config["port"] = int(os.getenv("DB_PORT"))
-    if os.getenv("DB_SSL_CA"):
-        config["ssl_ca"] = os.getenv("DB_SSL_CA")
-    return pooling.MySQLConnectionPool(pool_name="dulceria", pool_size=5, **config)
-
-
+    
+    
+    ssl_ca = os.getenv("DB_SSL_CA")
+    if ssl_ca:
+        config["ssl_ca"] = ssl_ca
+        config["ssl_verify_cert"] = True
+        
+    return pooling.MySQLConnectionPool(
+        pool_name="dulceria",
+        pool_size=5,
+        **config
+    )
+    
+    
 def conectar_bd():
     global _pool
     try:

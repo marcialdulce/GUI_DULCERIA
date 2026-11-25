@@ -1,3 +1,4 @@
+import os
 import flet as ft
 from modelos.modelo import ModeloDulceria
 from servicios.repositorio_ventas import RepositorioVentas
@@ -53,9 +54,11 @@ def conectar_dropdown(cmb, callback):
 def main(page: ft.Page):
     page.title = "Dulcería Algorrico - Multiplataforma"
     page.bgcolor = COLOR_FONDO
+    page.theme_mode = ft.ThemeMode.LIGHT
     page.padding = 0
     page.scroll = ft.ScrollMode.ADAPTIVE
-
+    
+    
     modelo = ModeloDulceria()
     repo_ventas = RepositorioVentas()
 
@@ -724,7 +727,8 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
+    puerto = int(os.getenv("PORT", 8550))
     if hasattr(ft, "run"):
-        ft.run(main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=8550)
+        ft.run(main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=puerto)
     else:
-        ft.app(target=main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=8550)
+        ft.app(target=main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=puerto)
