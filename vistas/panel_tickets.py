@@ -1,5 +1,6 @@
 import os
 import tempfile
+import threading
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from vistas import estilos
@@ -14,6 +15,7 @@ class PanelTickets(tk.Frame):
         self.controlador = controlador
         self.ventas = []
         self.venta_seleccionada = None
+        self._cargando = False
 
         tk.Label(self, text="TICKETS DE VENTA", bg=estilos.FONDO, fg="#4A2E35", font=("Arial", 20, "bold")).pack(pady=(18, 6))
         tk.Label(
@@ -45,20 +47,52 @@ class PanelTickets(tk.Frame):
 
         botones = tk.Frame(principal, bg="#F4F4F4")
         botones.pack(fill="x", padx=15, pady=12)
-        tk.Button(botones, text="ACTUALIZAR LISTA", bg="#D9EDEF", relief="flat", cursor="hand2", font=("Arial", 9, "bold"), command=self.cargar_tickets).pack(side="left", padx=4)
+        self.btn_actualizar = tk.Button(
+            botones,
+            text="ACTUALIZAR LISTA",
+            bg="#D9EDEF",
+            relief="flat",
+            cursor="hand2",
+            font=("Arial", 9, "bold"),
+            command=self.cargar_tickets,
+        )
+        self.btn_actualizar.pack(side="left", padx=4)
         tk.Button(botones, text="ABRIR TICKET PDF", bg="#D9EDEF", relief="flat", cursor="hand2", font=("Arial", 9, "bold"), command=self.abrir_ticket).pack(side="right", padx=4)
         tk.Button(botones, text="DESCARGAR TICKET", bg="#F4D03F", relief="flat", cursor="hand2", font=("Arial", 9, "bold"), command=self.descargar_ticket).pack(side="right", padx=4)
 
         self.cargar_tickets()
 
     def cargar_tickets(self):
+        if self._cargando:
+            return
+        self._cargando = True
+        self.btn_actualizar.config(state="disabled", text="CARGANDO...")
+        self.venta_seleccionada = None
         for fila in self.tabla.get_children():
             self.tabla.delete(fila)
+        self._escribir_detalle("Cargando tickets desde la nube, espera un momento...")
 
-        self.ventas = self.controlador.repo_ventas.obtener_todas()
-        self.ventas.sort(key=lambda v: v.get("fecha", ""), reverse=True)
-        self.venta_seleccionada = None
+        def _worker():
+            try:
+                ventas = self.controlador.repo_ventas.obtener_todas() or []
+                ventas.sort(key=lambda v: v.get("fecha", ""), reverse=True)
+                self.after(0, lambda: self._aplicar_tickets(ventas, None))
+            except Exception as exc:
+                self.after(0, lambda err=str(exc): self._aplicar_tickets([], err))
 
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _aplicar_tickets(self, ventas, error):
+        if not self.winfo_exists():
+            return
+        self._cargando = False
+        self.btn_actualizar.config(state="normal", text="ACTUALIZAR LISTA")
+
+        if error:
+            self._escribir_detalle(f"Error al cargar tickets: {error}")
+            return
+
+        self.ventas = ventas
         for venta in self.ventas:
             folio = venta.get("folio", "")
             self.tabla.insert(
@@ -68,7 +102,10 @@ class PanelTickets(tk.Frame):
                 values=(folio, venta.get("fecha", ""), venta.get("metodo_pago", ""), f"${float(venta.get('total', 0)):.2f}"),
             )
 
-        self._escribir_detalle("Selecciona un ticket de la lista para ver los datos de la compra.")
+        if self.ventas:
+            self._escribir_detalle("Selecciona un ticket de la lista para ver los datos de la compra.")
+        else:
+            self._escribir_detalle("No hay compras registradas todavía.")
 
     def _escribir_detalle(self, contenido):
         self.detalle.config(state="normal")

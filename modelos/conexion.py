@@ -18,27 +18,31 @@ def _crear_pool():
         "charset": "utf8mb4",
         "time_zone": "-06:00",
     }
-    
-    
+
     ssl_ca = os.getenv("DB_SSL_CA")
     if ssl_ca:
         config["ssl_ca"] = ssl_ca
         config["ssl_verify_cert"] = True
-        
+
     return pooling.MySQLConnectionPool(
         pool_name="dulceria",
-        pool_size=5,
+        pool_size=8,
         **config
     )
-    
-    
+
+
 def conectar_bd():
     global _pool
     try:
         if _pool is None:
             _pool = _crear_pool()
             print("Pool de conexiones listo")
-        return _pool.get_connection()
+        conn = _pool.get_connection()
+        conn.ping(reconnect=True, attempts=2, delay=1)
+        cur = conn.cursor()
+        cur.execute("SET time_zone = '-06:00'")
+        cur.close()
+        return conn
     except Error as e:
         print(f"Error al conectar a MySQL: {e}")
         return None

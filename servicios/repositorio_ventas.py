@@ -83,9 +83,16 @@ class RepositorioVentas:
                     INSERT INTO facturas (folio, rfc, razon_social, regimen_fiscal, cp_fiscal,
                                           correo, total, id_venta)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                """, (folio_fac, datos_factura["rfc"], datos_factura["razon_social"],
-                      datos_factura["regimen"], datos_factura["cp"],
-                      datos_factura["correo"], total, id_venta))
+                """, (
+                    folio_fac,
+                    datos_factura["rfc"],
+                    datos_factura["razon_social"],
+                    datos_factura["regimen"],
+                    datos_factura["cp"],
+                    datos_factura["correo"],
+                    total,
+                    id_venta,
+                ))
 
             conexion.commit()
 
@@ -113,15 +120,15 @@ class RepositorioVentas:
             conexion.rollback()
             raise e
         finally:
-            total = round(sum(float(item["subtotal"]) for item in carrito), 2)
-            subtotal = round(total / 1.16, 2)
-            impuesto = round(total - subtotal, 2)
+            if cursor:
+                cursor.close()
             if conexion.is_connected():
                 conexion.close()
-                
+
     def efectivo_turno(self, id_corte_caja):
         conexion = conectar_bd()
-        if not conexion: return 0.0
+        if not conexion:
+            return 0.0
         try:
             cur = conexion.cursor()
             cur.execute("SELECT COALESCE(SUM(monto), 0) FROM pagos_ventas WHERE id_corte_caja = %s AND id_metodo_pago = 1", (id_corte_caja,))
@@ -134,7 +141,8 @@ class RepositorioVentas:
 
     def tamano_actual(self, usuario_filtro=None):
         conexion = conectar_bd()
-        if not conexion: return 0
+        if not conexion:
+            return 0
         try:
             cur = conexion.cursor()
             if usuario_filtro:
@@ -152,7 +160,8 @@ class RepositorioVentas:
 
     def iterar(self, limite, usuario_filtro=None):
         conexion = conectar_bd()
-        if not conexion: return
+        if not conexion:
+            return
         try:
             cur = conexion.cursor(dictionary=True)
             filtro, params = "", []
@@ -162,7 +171,7 @@ class RepositorioVentas:
                     JOIN usuarios u ON c.id_usuario = u.id_usuario
                     WHERE u.username = %s)"""
                 params = [usuario_filtro]
-            
+
             cur.execute(f"""
                 SELECT v.id_venta, v.folio, v.fecha_hora,
                        v.subtotal, (v.subtotal + v.impuesto) AS total,
@@ -172,7 +181,7 @@ class RepositorioVentas:
                 FROM ventas v {filtro}
                 ORDER BY v.fecha_hora LIMIT %s
             """, params + [limite])
-            
+
             ventas = cur.fetchall()
             for i, v in enumerate(ventas, 1):
                 v["fecha"] = v["fecha_hora"].strftime("%Y-%m-%d %H:%M:%S") if v.get("fecha_hora") else ""
@@ -188,13 +197,14 @@ class RepositorioVentas:
         finally:
             conexion.close()
 
-    def obtener_todas(self):
+    def obtener_todas(self, limite=50):
         conexion = conectar_bd()
-        if not conexion: return []
+        if not conexion:
+            return []
         try:
             cur = conexion.cursor(dictionary=True)
-            # Corregido: Sin DATE_FORMAT de SQL, se maneja en Python
-            cur.execute("""
+            limite_sql = f"LIMIT {int(limite)}" if limite else ""
+            cur.execute(f"""
                 SELECT v.id_venta, v.folio, v.fecha_hora,
                        v.subtotal, (v.subtotal + v.impuesto) AS total,
                        COALESCE((SELECT mp.nombre_metodo_pago FROM pagos_ventas pv
@@ -203,18 +213,33 @@ class RepositorioVentas:
                        CASE WHEN f.id_factura IS NOT NULL THEN 'Facturada' ELSE 'Sin Factura' END AS estado_factura
                 FROM ventas v
                 LEFT JOIN facturas f ON v.id_venta = f.id_venta
-                ORDER BY v.fecha_hora DESC
+                ORDER BY v.id_venta DESC
+                {limite_sql}
             """)
             rows = cur.fetchall()
+            if not rows:
+                return []
+
+            ids_venta = [r["id_venta"] for r in rows]
+            placeholders = ", ".join(["%s"] * len(ids_venta))
+            cur.execute(f"""
+                SELECT dv.id_venta, p.nombre_dulce AS producto, dv.cantidad, dv.subtotal
+                FROM detalles_ventas dv
+                JOIN productos p ON dv.id_producto = p.id_producto
+                WHERE dv.id_venta IN ({placeholders})
+            """, tuple(ids_venta))
+
+            detalles_por_venta = {vid: [] for vid in ids_venta}
+            for det in cur.fetchall():
+                detalles_por_venta[det["id_venta"]].append({
+                    "producto": det["producto"],
+                    "cantidad": det["cantidad"],
+                    "subtotal": det["subtotal"],
+                })
+
             for r in rows:
                 r["fecha"] = r["fecha_hora"].strftime("%Y-%m-%d %H:%M:%S") if r.get("fecha_hora") else ""
-                cur.execute("""
-                    SELECT p.nombre_dulce AS producto, dv.cantidad, dv.subtotal
-                    FROM detalles_ventas dv
-                    JOIN productos p ON dv.id_producto = p.id_producto
-                    WHERE dv.id_venta = %s
-                """, (r["id_venta"],))
-                r["articulos"] = cur.fetchall()
+                r["articulos"] = detalles_por_venta.get(r["id_venta"], [])
                 r["total"] = float(r["total"])
             return rows
         finally:
