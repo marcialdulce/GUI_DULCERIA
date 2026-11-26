@@ -16,6 +16,7 @@ def _crear_pool():
         "password": os.getenv("DB_PASSWORD", ""),
         "database": os.getenv("DB_NAME"),
         "charset": "utf8mb4",
+        "time_zone": "-06:00",
     }
     
     
