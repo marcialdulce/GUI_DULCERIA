@@ -3,9 +3,28 @@ import mysql.connector
 from mysql.connector import Error, pooling
 from dotenv import load_dotenv
 
-load_dotenv()
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+for ruta_env in (os.path.join(BASE_DIR, ".env"), os.path.join(BASE_DIR, "modelos", ".env")):
+    if os.path.isfile(ruta_env):
+        load_dotenv(ruta_env, override=False)
+load_dotenv(override=False)
 
 _pool = None
+
+
+def _resolver_ruta_ssl(ssl_ca):
+    if not ssl_ca:
+        return None
+    if os.path.isfile(ssl_ca):
+        return ssl_ca
+    for candidato in (
+        os.path.join(BASE_DIR, ssl_ca),
+        os.path.join(BASE_DIR, "assets", ssl_ca),
+        os.path.join(BASE_DIR, "certs", os.path.basename(ssl_ca)),
+    ):
+        if os.path.isfile(candidato):
+            return candidato
+    return ssl_ca
 
 
 def _crear_pool():
@@ -19,7 +38,7 @@ def _crear_pool():
         "time_zone": "-06:00",
     }
 
-    ssl_ca = os.getenv("DB_SSL_CA")
+    ssl_ca = _resolver_ruta_ssl(os.getenv("DB_SSL_CA"))
     if ssl_ca:
         config["ssl_ca"] = ssl_ca
         config["ssl_verify_cert"] = True

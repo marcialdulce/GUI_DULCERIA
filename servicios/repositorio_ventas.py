@@ -244,3 +244,59 @@ class RepositorioVentas:
             return rows
         finally:
             conexion.close()
+            
+    def obtener_por_turno(self, id_corte_caja, limite=200):
+        if not id_corte_caja:
+            return []
+        conexion = conectar_bd()
+        if not conexion:
+            return []
+        try:
+            cur = conexion.cursor(dictionary=True)
+            limite_sql = f"LIMIT {int(limite)}" if limite else ""
+            cur.execute(f"""
+                SELECT v.id_venta, v.folio, v.fecha_hora,
+                       v.subtotal, v.impuesto, (v.subtotal + v.impuesto) AS total,
+                       COALESCE((SELECT mp.nombre_metodo_pago FROM pagos_ventas pv
+                                 JOIN metodos_pago mp ON pv.id_metodo_pago = mp.id_metodo_pago
+                                 WHERE pv.id_venta = v.id_venta LIMIT 1), 'Efectivo') AS metodo_pago,
+                       CASE WHEN f.id_factura IS NOT NULL THEN 'Facturada' ELSE 'Sin Factura' END AS estado_factura,
+                       f.folio AS folio_factura
+                FROM ventas v
+                LEFT JOIN facturas f ON v.id_venta = f.id_venta
+                WHERE v.id_corte_caja = %s
+                ORDER BY v.id_venta DESC
+                {limite_sql}
+            """, (id_corte_caja,))
+            rows = cur.fetchall()
+            if not rows:
+                return []
+
+            ids_venta = [r["id_venta"] for r in rows]
+            placeholders = ", ".join(["%s"] * len(ids_venta))
+            cur.execute(f"""
+                SELECT dv.id_venta, p.nombre_dulce AS producto, dv.cantidad, dv.precio_unitario, dv.subtotal
+                FROM detalles_ventas dv
+                JOIN productos p ON dv.id_producto = p.id_producto
+                WHERE dv.id_venta IN ({placeholders})
+            """, tuple(ids_venta))
+
+            detalles_por_venta = {vid: [] for vid in ids_venta}
+            for det in cur.fetchall():
+                detalles_por_venta[det["id_venta"]].append({
+                    "producto": det["producto"],
+                    "cantidad": int(det["cantidad"]),
+                    "precio_unitario": float(det.get("precio_unitario") or 0),
+                    "subtotal": float(det["subtotal"]),
+                })
+
+            for r in rows:
+                fh = r.get("fecha_hora")
+                r["fecha"] = fh.strftime("%Y-%m-%d %H:%M:%S") if hasattr(fh, "strftime") else str(fh or "")
+                r["articulos"] = detalles_por_venta.get(r["id_venta"], [])
+                r["total"] = float(r["total"])
+                r["subtotal"] = float(r.get("subtotal") or 0)
+                r["impuesto"] = float(r.get("impuesto") or 0)
+            return rows
+        finally:
+            conexion.close()
