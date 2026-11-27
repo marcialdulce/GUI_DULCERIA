@@ -14,3 +14,5 @@ reportes/
 .vscode/
 
 tickets/
+
+config_movil.env

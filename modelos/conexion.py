@@ -1,67 +1,74 @@
 import os
+from pathlib import Path
 import mysql.connector
-from mysql.connector import Error, pooling
 from dotenv import load_dotenv
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-for ruta_env in (os.path.join(BASE_DIR, ".env"), os.path.join(BASE_DIR, "modelos", ".env")):
-    if os.path.isfile(ruta_env):
-        load_dotenv(ruta_env, override=False)
-load_dotenv(override=False)
-
-_pool = None
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-def _resolver_ruta_ssl(ssl_ca):
-    if not ssl_ca:
-        return None
-    if os.path.isfile(ssl_ca):
-        return ssl_ca
-    for candidato in (
-        os.path.join(BASE_DIR, ssl_ca),
-        os.path.join(BASE_DIR, "assets", ssl_ca),
-        os.path.join(BASE_DIR, "certs", os.path.basename(ssl_ca)),
-    ):
-        if os.path.isfile(candidato):
-            return candidato
-    return ssl_ca
+def _cargar_entorno() -> None:
+    candidatos = [
+        BASE_DIR / "config_movil.env",
+        Path.cwd() / "config_movil.env",
+        BASE_DIR / ".env",
+        Path.cwd() / ".env",
+    ]
+    for ruta in candidatos:
+        try:
+            if ruta.is_file():
+                load_dotenv(dotenv_path=os.fspath(ruta), override=False)
+                break
+        except OSError:
+            continue
 
 
-def _crear_pool():
+def _resolver_ssl_ca() -> str | None:
+    ca_env = (os.getenv("DB_SSL_CA") or "").strip()
+    candidatos_ca = []
+    if ca_env:
+        p_env = Path(ca_env)
+        candidatos_ca.append(p_env if p_env.is_absolute() else BASE_DIR / p_env)
+        candidatos_ca.append(Path.cwd() / p_env)
+    candidatos_ca.extend([
+        BASE_DIR / "certs" / "isrgrootx1.pem",
+        Path.cwd() / "certs" / "isrgrootx1.pem",
+    ])
+    for ca_path in candidatos_ca:
+        try:
+            if ca_path.is_file():
+                return os.fspath(ca_path)
+        except OSError:
+            continue
+    return None
+
+
+_cargar_entorno()
+
+
+def obtener_conexion():
+    host = (os.getenv("DB_HOST") or "").strip()
+    port_raw = (os.getenv("DB_PORT") or "4000").strip()
+    user = (os.getenv("DB_USER") or "").strip()
+    password = os.getenv("DB_PASSWORD") or ""
+    database = (os.getenv("DB_NAME") or "").strip()
+
+    try:
+        port = int(port_raw)
+    except ValueError:
+        port = 4000
+
     config = {
-        "host": os.getenv("DB_HOST", "localhost"),
-        "port": int(os.getenv("DB_PORT", 3306)),
-        "user": os.getenv("DB_USER", "root"),
-        "password": os.getenv("DB_PASSWORD", ""),
-        "database": os.getenv("DB_NAME"),
-        "charset": "utf8mb4",
-        "time_zone": "-06:00",
+        "host": host,
+        "port": port,
+        "user": user,
+        "password": password,
+        "database": database,
+        "connection_timeout": 10,
     }
 
-    ssl_ca = _resolver_ruta_ssl(os.getenv("DB_SSL_CA"))
+    ssl_ca = _resolver_ssl_ca()
     if ssl_ca:
         config["ssl_ca"] = ssl_ca
         config["ssl_verify_cert"] = True
 
-    return pooling.MySQLConnectionPool(
-        pool_name="dulceria",
-        pool_size=8,
-        **config
-    )
-
-
-def conectar_bd():
-    global _pool
-    try:
-        if _pool is None:
-            _pool = _crear_pool()
-            print("Pool de conexiones listo")
-        conn = _pool.get_connection()
-        conn.ping(reconnect=True, attempts=2, delay=1)
-        cur = conn.cursor()
-        cur.execute("SET time_zone = '-06:00'")
-        cur.close()
-        return conn
-    except Error as e:
-        print(f"Error al conectar a MySQL: {e}")
-        return None
+    return mysql.connector.connect(**config)

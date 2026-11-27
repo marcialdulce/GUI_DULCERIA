@@ -1,3 +1,4 @@
+import contextlib
 import inspect
 import os
 import tempfile
@@ -7,12 +8,11 @@ from modelos.modelo import ModeloDulceria
 from servicios.repositorio_ventas import RepositorioVentas
 from vistas.generador_tickets import generar_comprobante_ticket_pdf, generar_ticket_pdf
 
-# Compatibilidad entre versiones de Flet (0.2x, 0.8x y 1.x)
 ICONS = getattr(ft, "Icons", getattr(ft, "icons", None))
 BTN_CLS = getattr(ft, "Button", getattr(ft, "ElevatedButton", None))
 OPT_CLS = getattr(ft, "DropdownOption", None) or ft.dropdown.Option
 ALIGN_CENTER = getattr(ft.Alignment, "CENTER", ft.Alignment(0, 0))
-TEXT_OVERFLOW_ELLIPSIS = getattr(getattr(ft, "TextOverflow", None), "ELLIPSIS", None)
+TEXT_OVERFLOW = getattr(getattr(ft, "TextOverflow", None), "ELLIPSIS", None)
 
 ICON_TIENDA = getattr(ICONS, "STOREFRONT", getattr(ICONS, "STORE", ICONS.POINT_OF_SALE))
 ICON_DESCARGA = getattr(ICONS, "DOWNLOAD", getattr(ICONS, "FILE_DOWNLOAD", ICONS.RECEIPT_LONG))
@@ -25,50 +25,82 @@ COLOR_VERDE = "#27AE60"
 COLOR_ROJO = "#C0392B"
 COLOR_AZUL = "#3A8D96"
 COLOR_MORADO = "#8E44AD"
-LIMITE_RENDER = 20
+COLOR_BLANCO = "#FFFFFF"
+COLOR_NEGRO = "#000000"
+COLOR_GRIS_CLARO = "#F4F4F4"
+COLOR_BORDE = "#DDDDDD"
+COLOR_TEXTO_SEC = "#555555"
+COLOR_TEXTO_SUAVE = "#666666"
 
+METODO_EFECTIVO = "Efectivo"
+METODO_DEBITO = "Tarjeta de débito"
+METODO_CREDITO = "Tarjeta de crédito"
+METODOS_ID = {
+    METODO_EFECTIVO: 1,
+    METODO_DEBITO: 2,
+    METODO_CREDITO: 3,
+}
+NOMBRES_METODO = {
+    1: METODO_EFECTIVO,
+    2: "Tarjeta débito",
+    3: "Tarjeta crédito",
+}
+ESTADO_SIN_FACTURA = "Sin Factura"
+TXT_ACTUALIZAR = "ACTUALIZAR"
+TXT_DESCARGAR_PDF = "DESCARGAR PDF"
+TXT_CERRAR = "Cerrar"
+FMT_FECHA = "%Y-%m-%d %H:%M:%S"
+
+LIMITE_RENDER = 20
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DIR_ASSETS = os.path.join(BASE_DIR, "assets")
 DIR_FONTS = os.path.join(DIR_ASSETS, "fonts")
 
 
-def obtener_dir_tickets(es_web=False):
-    """Devuelve una carpeta con permisos de escritura en Web (Render) y en APK (Android)."""
-    if es_web:
-        ruta = os.path.join(DIR_ASSETS, "tickets")
-        try:
-            os.makedirs(ruta, exist_ok=True)
-            return ruta
-        except OSError:
-            pass
+def _carpeta_escribible(ruta):
+    if not ruta:
+        return False
+    try:
+        os.makedirs(ruta, exist_ok=True)
+        prueba = os.path.join(ruta, ".write_test")
+        with open(prueba, "w", encoding="utf-8") as archivo:
+            archivo.write("ok")
+        os.remove(prueba)
+        return True
+    except OSError:
+        return False
 
+
+def obtener_dir_tickets(es_web=False):
+    if es_web:
+        ruta_web = os.path.join(DIR_ASSETS, "tickets")
+        if _carpeta_escribible(ruta_web):
+            return ruta_web
+
+    app_data = os.getenv("FLET_APP_STORAGE_DATA")
+    app_temp = os.getenv("FLET_APP_STORAGE_TEMP")
     candidatos = [
         "/storage/emulated/0/Download/Algorrico_Tickets",
-        os.path.join(os.getenv("FLET_APP_STORAGE_DATA") or "", "tickets") if os.getenv("FLET_APP_STORAGE_DATA") else "",
-        os.path.join(os.getenv("FLET_APP_STORAGE_TEMP") or "", "tickets") if os.getenv("FLET_APP_STORAGE_TEMP") else "",
+        os.path.join(app_data, "tickets") if app_data else "",
+        os.path.join(app_temp, "tickets") if app_temp else "",
         os.path.join(DIR_ASSETS, "tickets"),
         os.path.join(tempfile.gettempdir(), "algorrico_tickets"),
     ]
     for ruta in candidatos:
-        if not ruta:
-            continue
-        try:
-            os.makedirs(ruta, exist_ok=True)
-            prueba = os.path.join(ruta, ".write_test")
-            with open(prueba, "w", encoding="utf-8") as f:
-                f.write("ok")
-            os.remove(prueba)
+        if _carpeta_escribible(ruta):
             return ruta
-        except OSError:
-            continue
     return tempfile.gettempdir()
 
 
 def detectar_fuente_local():
-    """Busca un archivo .ttf en assets/fonts/ para evitar corrupción de letras en Android/Web."""
     if not os.path.isdir(DIR_FONTS):
         return None
-    preferidas = ["Roboto-Regular.ttf", "NotoSans-Regular.ttf", "Inter-Regular.ttf", "OpenSans-Regular.ttf"]
+    preferidas = (
+        "Roboto-Regular.ttf",
+        "NotoSans-Regular.ttf",
+        "Inter-Regular.ttf",
+        "OpenSans-Regular.ttf",
+    )
     for nombre in preferidas:
         if os.path.isfile(os.path.join(DIR_FONTS, nombre)):
             return f"/fonts/{nombre}"
@@ -86,12 +118,12 @@ def borde_all(ancho, color):
 
 
 def crear_texto(valor, **kwargs):
-    if TEXT_OVERFLOW_ELLIPSIS is not None and "overflow" not in kwargs and "max_lines" in kwargs:
-        kwargs["overflow"] = TEXT_OVERFLOW_ELLIPSIS
+    if TEXT_OVERFLOW is not None and "overflow" not in kwargs and "max_lines" in kwargs:
+        kwargs["overflow"] = TEXT_OVERFLOW
     return ft.Text(valor, **kwargs)
 
 
-def crear_boton(texto, on_click=None, bgcolor=None, color=None, width=None, height=None, expand=False, url=None, icon=None):
+def crear_boton(texto, on_click=None, bgcolor=None, color=None, icon=None, **extra):
     lbl = crear_texto(
         texto,
         color=color,
@@ -100,28 +132,22 @@ def crear_boton(texto, on_click=None, bgcolor=None, color=None, width=None, heig
         no_wrap=False,
         max_lines=2,
     )
-    contenido = (
-        ft.Row(
+    contenido = lbl
+    if icon is not None:
+        contenido = ft.Row(
             controls=[ft.Icon(icon, color=color, size=18), lbl],
             alignment=ft.MainAxisAlignment.CENTER,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=6,
             tight=True,
         )
-        if icon is not None
-        else lbl
-    )
-    kwargs = dict(
-        content=contenido,
-        bgcolor=bgcolor,
-        color=color,
-        width=width,
-        height=height,
-        expand=expand,
-        on_click=on_click,
-    )
-    if url:
-        kwargs["url"] = url
+    kwargs = {
+        "content": contenido,
+        "bgcolor": bgcolor,
+        "color": color,
+        "on_click": on_click,
+        **extra,
+    }
     return BTN_CLS(**kwargs)
 
 
@@ -132,73 +158,77 @@ def conectar_dropdown(cmb, callback):
         cmb.on_change = callback
 
 
-def main(page: ft.Page):
-    page.title = "Dulcería Algorrico - Caja Móvil"
-    page.bgcolor = COLOR_FONDO
-    page.theme_mode = ft.ThemeMode.LIGHT
-    page.padding = 0
-    page.scroll = ft.ScrollMode.ADAPTIVE
+def _limpiar_nombre_archivo(valor, defecto):
+    return str(valor or defecto).replace("/", "_").replace(" ", "_")
 
-    # Fuente explícita para evitar pérdida o encimado de letras
-    ruta_fuente = detectar_fuente_local()
-    if ruta_fuente:
-        page.fonts = {"AlgorricoFont": ruta_fuente}
-        page.theme = ft.Theme(
+
+def _formatear_fecha(valor):
+    if hasattr(valor, "strftime"):
+        return valor.strftime(FMT_FECHA)
+    return str(valor or "")
+
+
+class AppMovil:
+    def __init__(self, page: ft.Page):
+        self.page = page
+        self.es_web = bool(getattr(page, "web", False))
+        self.modelo = ModeloDulceria()
+        self.repo_ventas = RepositorioVentas()
+        self.contenedor_cuerpo = ft.Container(padding=12, expand=True)
+
+        self.usuario = None
+        self.id_usuario = None
+        self.rol = None
+        self.id_turno = None
+        self.vista_actual = 0
+        self.pagos = []
+        self.datos_factura = None
+        self.ventas_turno_cache = None
+        self.ultimo_comprobante = None
+
+        self._configurar_pagina()
+
+    def _configurar_pagina(self):
+        self.page.title = "Dulcería Algorrico - Caja Móvil"
+        self.page.bgcolor = COLOR_FONDO
+        self.page.theme_mode = ft.ThemeMode.LIGHT
+        self.page.padding = 0
+        self.page.scroll = ft.ScrollMode.ADAPTIVE
+
+        # Carga fuente local para evitar fallos de texto en Android
+        ruta_fuente = detectar_fuente_local()
+        if ruta_fuente:
+            self.page.fonts = {"AlgorricoFont": ruta_fuente}
+            fuente = "AlgorricoFont"
+        else:
+            fuente = "Roboto"
+
+        self.page.theme = ft.Theme(
             color_scheme_seed=COLOR_MARCA,
-            font_family="AlgorricoFont",
+            font_family=fuente,
             use_material3=True,
         )
-    else:
-        page.theme = ft.Theme(
-            color_scheme_seed=COLOR_MARCA,
-            font_family="Roboto",
-            use_material3=True,
-        )
 
-    es_web = bool(getattr(page, "web", False))
-    modelo = ModeloDulceria()
-    repo_ventas = RepositorioVentas()
+    def safe_update(self):
+        with contextlib.suppress(Exception):
+            self.page.update()
 
-    sesion = {
-        "usuario": None,
-        "id_usuario": None,
-        "rol": None,
-        "id_turno": None,
-        "vista_actual": 0,
-        "pagos": [],
-        "datos_factura": None,
-        "ventas_turno_cache": None,
-        "ultimo_comprobante": None,
-    }
-
-    def safe_update():
-        try:
-            page.update()
-        except Exception:
-            pass
-
-    def abrir_url_segura(url_destino):
-        """Abre URL de descarga de manera compatible con Flet 0.x y 1.x."""
-        try:
-            fn = getattr(page, "launch_url", None)
+    def abrir_url_segura(self, url_destino):
+        with contextlib.suppress(Exception):
+            fn = getattr(self.page, "launch_url", None)
             if callable(fn):
                 if inspect.iscoroutinefunction(fn):
-                    page.run_task(fn, url_destino)
+                    self.page.run_task(fn, url_destino)
                 else:
                     fn(url_destino)
-                return True
-        except Exception:
-            pass
-        return False
 
-    def mostrar_aviso(mensaje, color=COLOR_VERDE):
-        """SnackBar con texto limpio y envolvente para evitar letras encimadas."""
+    def mostrar_aviso(self, mensaje, color=COLOR_VERDE):
         kwargs_sb = {
             "content": ft.Container(
                 padding=4,
                 content=crear_texto(
                     str(mensaje),
-                    color="#FFFFFF",
+                    color=COLOR_BLANCO,
                     size=14,
                     weight=ft.FontWeight.W_500,
                     no_wrap=False,
@@ -211,44 +241,46 @@ def main(page: ft.Page):
         if hasattr(ft, "SnackBarBehavior"):
             kwargs_sb["behavior"] = ft.SnackBarBehavior.FLOATING
         sb = ft.SnackBar(**kwargs_sb)
+        self._mostrar_overlay(sb)
 
-        if hasattr(page, "show_dialog"):
-            page.show_dialog(sb)
-        elif hasattr(page, "open"):
-            page.open(sb)
+    def _mostrar_overlay(self, control):
+        if hasattr(self.page, "show_dialog"):
+            self.page.show_dialog(control)
+        elif hasattr(self.page, "open"):
+            self.page.open(control)
         else:
-            page.overlay.append(sb)
-            sb.open = True
-            safe_update()
+            self.page.overlay.append(control)
+            control.open = True
+            self.safe_update()
 
-    def abrir_dialogo(dlg):
-        if hasattr(page, "show_dialog"):
-            page.show_dialog(dlg)
-        elif hasattr(page, "open"):
-            page.open(dlg)
+    def abrir_dialogo(self, dlg):
+        if hasattr(self.page, "show_dialog"):
+            self.page.show_dialog(dlg)
+        elif hasattr(self.page, "open"):
+            self.page.open(dlg)
         else:
-            page.dialog = dlg
+            self.page.dialog = dlg
             dlg.open = True
-            safe_update()
+            self.safe_update()
 
-    def cerrar_dialogo(dlg):
-        if hasattr(page, "pop_dialog"):
-            page.pop_dialog()
-        elif hasattr(page, "close"):
-            page.close(dlg)
+    def cerrar_dialogo(self, dlg):
+        if hasattr(self.page, "pop_dialog"):
+            self.page.pop_dialog()
+        elif hasattr(self.page, "close"):
+            self.page.close(dlg)
         else:
             dlg.open = False
-            safe_update()
+            self.safe_update()
 
-    def obtener_ventas_del_turno(id_turno):
-        """Consulta estrictamente las ventas pertenecientes al turno activo."""
+    def obtener_ventas_del_turno(self, id_turno):
         if not id_turno:
             return []
-        if hasattr(repo_ventas, "obtener_por_turno"):
-            return repo_ventas.obtener_por_turno(id_turno) or []
+        if hasattr(self.repo_ventas, "obtener_por_turno"):
+            return self.repo_ventas.obtener_por_turno(id_turno) or []
+        return self._consultar_ventas_turno_respaldo(id_turno)
 
-        # Respaldo directo si aún no se agrega obtener_por_turno en repositorio_ventas.py
-        rows = modelo._ejecutar_consulta(
+    def _consultar_ventas_turno_respaldo(self, id_turno):
+        rows = self.modelo._ejecutar_consulta(
             """
             SELECT v.id_venta, v.folio, v.fecha_hora,
                    v.subtotal, v.impuesto, (v.subtotal + v.impuesto) AS total,
@@ -270,7 +302,7 @@ def main(page: ft.Page):
 
         ids = [r["id_venta"] for r in rows]
         ph = ", ".join(["%s"] * len(ids))
-        detalles = modelo._ejecutar_consulta(
+        detalles = self.modelo._ejecutar_consulta(
             f"""
             SELECT dv.id_venta, p.nombre_dulce AS producto, dv.cantidad, dv.precio_unitario, dv.subtotal
             FROM detalles_ventas dv
@@ -282,40 +314,35 @@ def main(page: ft.Page):
         ) or []
 
         mapa = {vid: [] for vid in ids}
-        for d in detalles:
-            mapa[d["id_venta"]].append({
-                "producto": d["producto"],
-                "cantidad": int(d["cantidad"]),
-                "precio_unitario": float(d.get("precio_unitario") or 0),
-                "subtotal": float(d["subtotal"]),
+        for det in detalles:
+            mapa[det["id_venta"]].append({
+                "producto": det["producto"],
+                "cantidad": int(det["cantidad"]),
+                "precio_unitario": float(det.get("precio_unitario") or 0),
+                "subtotal": float(det["subtotal"]),
             })
 
-        for r in rows:
-            fh = r.get("fecha_hora")
-            r["fecha"] = fh.strftime("%Y-%m-%d %H:%M:%S") if hasattr(fh, "strftime") else str(fh or "")
-            r["articulos"] = mapa.get(r["id_venta"], [])
-            r["total"] = float(r["total"])
-            r["subtotal"] = float(r.get("subtotal") or 0)
-            r["impuesto"] = float(r.get("impuesto") or 0)
+        for row in rows:
+            row["fecha"] = _formatear_fecha(row.get("fecha_hora"))
+            row["articulos"] = mapa.get(row["id_venta"], [])
+            row["total"] = float(row["total"])
+            row["subtotal"] = float(row.get("subtotal") or 0)
+            row["impuesto"] = float(row.get("impuesto") or 0)
         return rows
 
-    def preparar_pdf_ticket(venta):
-        """Genera el PDF del ticket bajo demanda y devuelve (ruta_local, url_web)."""
-        folio = str(venta.get("folio", "venta")).replace("/", "_").replace(" ", "_")
+    def preparar_pdf_ticket(self, venta):
+        folio = _limpiar_nombre_archivo(venta.get("folio"), "venta")
         nombre_pdf = f"Ticket_{folio}.pdf"
-        carpeta = obtener_dir_tickets(es_web=es_web)
-        ruta_pdf = os.path.join(carpeta, nombre_pdf)
+        ruta_pdf = os.path.join(obtener_dir_tickets(self.es_web), nombre_pdf)
         generar_comprobante_ticket_pdf(ruta_pdf, venta)
-        url_web = f"/tickets/{nombre_pdf}" if es_web else None
+        url_web = f"/tickets/{nombre_pdf}" if self.es_web else None
         return ruta_pdf, url_web
 
-    def preparar_pdf_factura(venta, factura):
-        """Genera el PDF de la factura bajo demanda y devuelve (ruta_local, url_web)."""
-        folio = str(venta.get("folio_factura") or venta.get("folio", "venta")).replace("/", "_").replace(" ", "_")
-        rfc = str(factura.get("rfc", "XAXX010101000")).replace("/", "_").replace(" ", "_")
+    def preparar_pdf_factura(self, venta, factura):
+        folio = _limpiar_nombre_archivo(venta.get("folio_factura") or venta.get("folio"), "venta")
+        rfc = _limpiar_nombre_archivo(factura.get("rfc"), "XAXX010101000")
         nombre_pdf = f"Factura_{folio}_{rfc}.pdf"
-        carpeta = obtener_dir_tickets(es_web=es_web)
-        ruta_pdf = os.path.join(carpeta, nombre_pdf)
+        ruta_pdf = os.path.join(obtener_dir_tickets(self.es_web), nombre_pdf)
         generar_ticket_pdf(
             ruta_completa=ruta_pdf,
             rfc=rfc,
@@ -330,84 +357,82 @@ def main(page: ft.Page):
             correo=factura.get("correo", ""),
             folio_factura=folio,
         )
-        url_web = f"/tickets/{nombre_pdf}" if es_web else None
+        url_web = f"/tickets/{nombre_pdf}" if self.es_web else None
         return ruta_pdf, url_web
 
-    def descargar_comprobante_ticket(venta):
-        """Genera y permite descargar/guardar el ticket tanto en Web (Render) como en APK."""
+    def _abrir_pdf_local(self, ruta_pdf):
+        with contextlib.suppress(Exception):
+            if os.name == "nt":
+                os.startfile(ruta_pdf)
+            else:
+                self.abrir_url_segura(f"file://{ruta_pdf}")
+
+    def descargar_comprobante_ticket(self, venta):
         try:
-            ruta_pdf, url_web = preparar_pdf_ticket(venta)
+            ruta_pdf, url_web = self.preparar_pdf_ticket(venta)
         except Exception as ex:
-            mostrar_aviso(f"No se pudo generar el PDF: {ex}", COLOR_ROJO)
+            self.mostrar_aviso(f"No se pudo generar el PDF: {ex}", COLOR_ROJO)
             return
 
         folio = venta.get("folio", "Ticket")
-        if es_web and url_web:
-            abrir_url_segura(url_web)
-            dlg_dl = ft.AlertDialog(
+        if self.es_web and url_web:
+            self.abrir_url_segura(url_web)
+            dlg = ft.AlertDialog(
                 modal=True,
                 title=ft.Text(f"Ticket {folio} listo"),
                 content=ft.Text(
-                    "El comprobante PDF se generó correctamente. Si la descarga no inició automáticamente, toca el botón de abajo.",
+                    "El comprobante PDF se generó correctamente. Si no inició la descarga, toca el botón de abajo.",
                     size=13,
                 ),
                 actions=[
-                    ft.TextButton(content=ft.Text("Cerrar"), on_click=lambda e: cerrar_dialogo(dlg_dl)),
+                    ft.TextButton(content=ft.Text(TXT_CERRAR), on_click=lambda _: self.cerrar_dialogo(dlg)),
                     crear_boton(
-                        "DESCARGAR PDF",
-                        on_click=None,
+                        TXT_DESCARGAR_PDF,
                         bgcolor=COLOR_AMARILLO,
-                        color="#000000",
-                        url=url_web,
+                        color=COLOR_NEGRO,
                         icon=ICON_DESCARGA,
+                        url=url_web,
                     ),
                 ],
             )
-            abrir_dialogo(dlg_dl)
-        else:
-            try:
-                if os.name == "nt":
-                    os.startfile(ruta_pdf)
-                else:
-                    abrir_url_segura(f"file://{ruta_pdf}")
-            except Exception:
-                pass
+            self.abrir_dialogo(dlg)
+            return
 
-            dlg_ok = ft.AlertDialog(
-                modal=True,
-                title=ft.Text(f"Ticket {folio} guardado"),
-                content=ft.Column(
-                    tight=True,
-                    spacing=8,
-                    controls=[
-                        ft.Text("El ticket PDF se guardó correctamente en el dispositivo.", size=13),
-                        ft.Container(
-                            bgcolor="#F4F4F4",
-                            border=borde_all(1, "#DDDDDD"),
-                            border_radius=6,
-                            padding=8,
-                            content=ft.Text(ruta_pdf, size=11, selectable=True, color="#333333"),
-                        ),
-                    ],
-                ),
-                actions=[
-                    crear_boton("ACEPTAR", on_click=lambda e: cerrar_dialogo(dlg_ok), bgcolor=COLOR_VERDE, color="#FFFFFF"),
+        self._abrir_pdf_local(ruta_pdf)
+        dlg_ok = ft.AlertDialog(
+            modal=True,
+            title=ft.Text(f"Ticket {folio} guardado"),
+            content=ft.Column(
+                tight=True,
+                spacing=8,
+                controls=[
+                    ft.Text("El ticket PDF se guardó en el dispositivo.", size=13),
+                    ft.Container(
+                        bgcolor=COLOR_GRIS_CLARO,
+                        border=borde_all(1, COLOR_BORDE),
+                        border_radius=6,
+                        padding=8,
+                        content=ft.Text(ruta_pdf, size=11, selectable=True, color="#333333"),
+                    ),
                 ],
-            )
-            abrir_dialogo(dlg_ok)
+            ),
+            actions=[
+                crear_boton("ACEPTAR", on_click=lambda _: self.cerrar_dialogo(dlg_ok), bgcolor=COLOR_VERDE, color=COLOR_BLANCO),
+            ],
+        )
+        self.abrir_dialogo(dlg_ok)
 
-    def descargar_comprobante_factura(venta, factura):
-        """Genera y permite descargar/guardar la factura tanto en Web (Render) como en APK."""
+    def descargar_comprobante_factura(self, venta, factura):
         try:
-            ruta_pdf, url_web = preparar_pdf_factura(venta, factura)
+            ruta_pdf, url_web = self.preparar_pdf_factura(venta, factura)
         except Exception as ex:
-            mostrar_aviso(f"No se pudo generar la factura PDF: {ex}", COLOR_ROJO)
+            self.mostrar_aviso(f"No se pudo generar la factura PDF: {ex}", COLOR_ROJO)
             return
 
         folio = venta.get("folio_factura") or venta.get("folio", "Factura")
-        if es_web and url_web:
-            abrir_url_segura(url_web)
-            dlg_dl = ft.AlertDialog(
+        if self.es_web and url_web:
+            self.abrir_url_segura(url_web)
+            dlg = ft.AlertDialog(
                 modal=True,
                 title=ft.Text(f"Factura {folio} lista"),
                 content=ft.Text(
@@ -415,43 +440,88 @@ def main(page: ft.Page):
                     size=13,
                 ),
                 actions=[
-                    ft.TextButton(content=ft.Text("Cerrar"), on_click=lambda e: cerrar_dialogo(dlg_dl)),
+                    ft.TextButton(content=ft.Text(TXT_CERRAR), on_click=lambda _: self.cerrar_dialogo(dlg)),
                     crear_boton(
                         "DESCARGAR FACTURA",
-                        on_click=None,
                         bgcolor=COLOR_MORADO,
-                        color="#FFFFFF",
-                        url=url_web,
+                        color=COLOR_BLANCO,
                         icon=ICON_DESCARGA,
+                        url=url_web,
                     ),
                 ],
             )
-            abrir_dialogo(dlg_dl)
-        else:
-            try:
-                if os.name == "nt":
-                    os.startfile(ruta_pdf)
-                else:
-                    abrir_url_segura(f"file://{ruta_pdf}")
-            except Exception:
-                pass
-            mostrar_aviso(f"Factura guardada en: {ruta_pdf}", COLOR_VERDE)
+            self.abrir_dialogo(dlg)
+            return
 
-    # =========================================================================
-    # LOGIN
-    # =========================================================================
-    def mostrar_login():
-        page.appbar = None
-        page.navigation_bar = None
-        page.controls.clear()
+        self._abrir_pdf_local(ruta_pdf)
+        self.mostrar_aviso(f"Factura guardada en: {ruta_pdf}", COLOR_VERDE)
 
-        txt_user = ft.TextField(label="Usuario", width=290, bgcolor="#FFFFFF")
+    def _abrir_o_recuperar_turno(self, id_usuario, num_caja):
+        corte = self.modelo._ejecutar_consulta(
+            """SELECT id_corte_caja FROM cortes_caja
+               WHERE id_usuario = %s AND estado = 'abierto'
+               ORDER BY id_corte_caja DESC LIMIT 1""",
+            (id_usuario,),
+            fetch=True,
+        )
+        if corte:
+            return corte["id_corte_caja"]
+        return self.modelo._ejecutar_consulta(
+            "INSERT INTO cortes_caja (fondo_inicial, id_usuario, id_caja) VALUES (500.00, %s, %s)",
+            (id_usuario, num_caja),
+        )
+
+    def _procesar_login(self, usuario, password, caja_str):
+        if not usuario or not password:
+            self.mostrar_aviso("Ingresa usuario y contraseña.", COLOR_ROJO)
+            return
+
+        try:
+            user_data = self.modelo.validar_usuario(usuario, password)
+        except Exception as ex:
+            self.mostrar_aviso(f"Error de conexión con la base de datos: {ex}", COLOR_ROJO)
+            return
+
+        if not user_data:
+            self.mostrar_aviso("Usuario o contraseña incorrectos.", COLOR_ROJO)
+            return
+
+        rol = self.modelo.obtener_rol(user_data["id_rol"])
+        if rol.strip().lower() != "cajero":
+            self.mostrar_aviso("Acceso exclusivo para Cajeros. Usa la versión de escritorio.", COLOR_ROJO)
+            return
+
+        try:
+            id_turno = self._abrir_o_recuperar_turno(user_data["id_usuario"], int(caja_str or 1))
+        except Exception as ex:
+            self.mostrar_aviso(f"No se pudo abrir el turno de caja: {ex}", COLOR_ROJO)
+            return
+
+        self.usuario = usuario
+        self.id_usuario = user_data["id_usuario"]
+        self.rol = rol
+        self.id_turno = id_turno
+        self.ventas_turno_cache = None
+        self.datos_factura = None
+        self.ultimo_comprobante = None
+        self.pagos.clear()
+        self.modelo.ticket_actual.clear()
+
+        self.mostrar_aviso(f"Turno #{id_turno} activo - {usuario}", COLOR_VERDE)
+        self.cargar_layout_principal()
+
+    def mostrar_login(self):
+        self.page.appbar = None
+        self.page.navigation_bar = None
+        self.page.controls.clear()
+
+        txt_user = ft.TextField(label="Usuario", width=290, bgcolor=COLOR_BLANCO)
         txt_pass = ft.TextField(
             label="Contraseña",
             password=True,
             can_reveal_password=True,
             width=290,
-            bgcolor="#FFFFFF",
+            bgcolor=COLOR_BLANCO,
         )
         cmb_caja = ft.Dropdown(
             label="Caja a operar (1-4)",
@@ -460,64 +530,17 @@ def main(page: ft.Page):
             options=[OPT_CLS(key=str(i), text=f"CAJA-0{i}") for i in range(1, 5)],
         )
 
-        def iniciar_sesion(e):
-            u = (txt_user.value or "").strip()
-            p = (txt_pass.value or "").strip()
-            if not u or not p:
-                mostrar_aviso("Ingresa usuario y contraseña.", COLOR_ROJO)
-                return
+        def on_ingresar(_):
+            self._procesar_login(
+                (txt_user.value or "").strip(),
+                (txt_pass.value or "").strip(),
+                cmb_caja.value,
+            )
 
-            try:
-                user_data = modelo.validar_usuario(u, p)
-            except Exception as ex:
-                mostrar_aviso(f"Error de conexión con la base de datos: {ex}", COLOR_ROJO)
-                return
+        txt_pass.on_submit = on_ingresar
 
-            if not user_data:
-                mostrar_aviso("Usuario o contraseña incorrectos.", COLOR_ROJO)
-                return
-
-            rol = modelo.obtener_rol(user_data["id_rol"])
-            if rol.strip().lower() != "cajero":
-                mostrar_aviso("Acceso exclusivo para Cajeros. Usa la versión de escritorio.", COLOR_ROJO)
-                return
-
-            sesion["usuario"] = u
-            sesion["id_usuario"] = user_data["id_usuario"]
-            sesion["rol"] = rol
-            sesion["ventas_turno_cache"] = None
-            sesion["datos_factura"] = None
-            sesion["ultimo_comprobante"] = None
-            sesion["pagos"].clear()
-            modelo.ticket_actual.clear()
-
-            try:
-                corte = modelo._ejecutar_consulta(
-                    """SELECT id_corte_caja FROM cortes_caja
-                       WHERE id_usuario = %s AND estado = 'abierto'
-                       ORDER BY id_corte_caja DESC LIMIT 1""",
-                    (sesion["id_usuario"],),
-                    fetch=True,
-                )
-                if corte:
-                    sesion["id_turno"] = corte["id_corte_caja"]
-                else:
-                    num_caja = int(cmb_caja.value or 1)
-                    sesion["id_turno"] = modelo._ejecutar_consulta(
-                        "INSERT INTO cortes_caja (fondo_inicial, id_usuario, id_caja) VALUES (500.00, %s, %s)",
-                        (sesion["id_usuario"], num_caja),
-                    )
-            except Exception as ex:
-                mostrar_aviso(f"No se pudo abrir el turno de caja: {ex}", COLOR_ROJO)
-                return
-
-            mostrar_aviso(f"Turno #{sesion['id_turno']} activo - {u}", COLOR_VERDE)
-            cargar_layout_principal()
-
-        txt_pass.on_submit = iniciar_sesion
-
-        tarjeta_login = ft.Container(
-            bgcolor="#FFFFFF",
+        tarjeta = ft.Container(
+            bgcolor=COLOR_BLANCO,
             border=borde_all(2, "#F3C6D1"),
             border_radius=12,
             padding=24,
@@ -534,15 +557,15 @@ def main(page: ft.Page):
                             ft.Text("Algorrico", size=28, weight=ft.FontWeight.BOLD, color=COLOR_MARCA),
                         ],
                     ),
-                    ft.Text("Caja Móvil - Exclusivo Cajero", size=14, color="#555555"),
+                    ft.Text("Caja Móvil - Exclusivo Cajero", size=14, color=COLOR_TEXTO_SEC),
                     txt_user,
                     txt_pass,
                     cmb_caja,
                     crear_boton(
                         "ABRIR CAJA E INGRESAR",
-                        on_click=iniciar_sesion,
+                        on_click=on_ingresar,
                         bgcolor=COLOR_MARCA,
-                        color="#FFFFFF",
+                        color=COLOR_BLANCO,
                         width=290,
                         height=44,
                     ),
@@ -550,171 +573,177 @@ def main(page: ft.Page):
             ),
         )
 
-        page.add(ft.Container(expand=True, alignment=ALIGN_CENTER, padding=16, content=tarjeta_login))
-        safe_update()
+        self.page.add(ft.Container(expand=True, alignment=ALIGN_CENTER, padding=16, content=tarjeta))
+        self.safe_update()
 
-    contenedor_cuerpo = ft.Container(padding=12, expand=True)
-
-    # =========================================================================
-    # VISTA 0: PUNTO DE VENTA (TICKET HASTA ARRIBA, CATÁLOGO ABAJO)
-    # =========================================================================
-    def vista_punto_venta():
-        txt_buscar = ft.TextField(
-            label="Buscar producto (nombre o código)",
-            bgcolor="#FFFFFF",
-            dense=True,
+    def _tarjeta_item_carrito(self, item, on_modificar, on_quitar):
+        nombre = item["producto"]
+        return ft.Container(
+            bgcolor=COLOR_BLANCO,
+            border=borde_all(1, COLOR_BORDE),
+            border_radius=8,
+            padding=8,
+            content=ft.Row(
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                controls=[
+                    ft.Column(
+                        expand=True,
+                        spacing=2,
+                        controls=[
+                            crear_texto(nombre, weight=ft.FontWeight.BOLD, size=13, max_lines=2),
+                            ft.Text(
+                                f"Cant: {item['cantidad']}  |  ${float(item['subtotal']):.2f}",
+                                size=12,
+                                color=COLOR_TEXTO_SEC,
+                            ),
+                        ],
+                    ),
+                    ft.Row(
+                        spacing=0,
+                        tight=True,
+                        controls=[
+                            ft.IconButton(
+                                icon=ICONS.REMOVE_CIRCLE_OUTLINE,
+                                icon_color="#E67E22",
+                                on_click=lambda _, n=nombre: on_modificar(n, -1),
+                            ),
+                            ft.IconButton(
+                                icon=ICONS.ADD_CIRCLE_OUTLINE,
+                                icon_color=COLOR_VERDE,
+                                on_click=lambda _, n=nombre: on_modificar(n, 1),
+                            ),
+                            ft.IconButton(
+                                icon=ICONS.DELETE_OUTLINE,
+                                icon_color=COLOR_ROJO,
+                                on_click=lambda _, n=nombre: on_quitar(n),
+                            ),
+                        ],
+                    ),
+                ],
+            ),
         )
+
+    def _tarjeta_producto(self, prod, on_agregar):
+        color_stock = COLOR_ROJO if prod["stock"] <= prod.get("stock_minimo", 5) else COLOR_TEXTO_SEC
+        return ft.Container(
+            bgcolor=COLOR_BLANCO,
+            border=borde_all(1, COLOR_BORDE),
+            border_radius=8,
+            padding=10,
+            content=ft.Row(
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                controls=[
+                    ft.Column(
+                        expand=True,
+                        spacing=2,
+                        controls=[
+                            crear_texto(prod["nombre"], weight=ft.FontWeight.BOLD, size=13, max_lines=2),
+                            ft.Text(f"${prod['precio']:.2f}  |  Stock: {prod['stock']}", size=12, color=color_stock),
+                        ],
+                    ),
+                    crear_boton(
+                        "+1",
+                        on_click=lambda _, p=prod: on_agregar(p),
+                        bgcolor=COLOR_AMARILLO,
+                        color=COLOR_NEGRO,
+                    ),
+                ],
+            ),
+        )
+
+    def _filtrar_productos(self, texto):
+        prods = [p for p in self.modelo.inventario if p["stock"] > 0]
+        if not texto:
+            return prods[:LIMITE_RENDER]
+        return [
+            p
+            for p in prods
+            if texto in p["nombre"].lower() or texto in str(p.get("codigo_barras") or "").lower()
+        ][:LIMITE_RENDER]
+
+    def _agregar_item_carrito(self, prod, refrescar_fn):
+        if self.modelo.agregar_al_ticket(prod["nombre"], 1) == "stock_insuficiente":
+            self.mostrar_aviso(f"Sin stock suficiente de {prod['nombre']}.", COLOR_ROJO)
+            return
+        refrescar_fn()
+
+    def _modificar_item_carrito(self, nombre, delta, refrescar_fn):
+        ok, msg = self.modelo.actualizar_cantidad_ticket(nombre, delta)
+        if not ok:
+            self.mostrar_aviso(msg, COLOR_ROJO)
+            return
+        refrescar_fn()
+
+    def _quitar_item_carrito(self, nombre, refrescar_fn):
+        self.modelo.quitar_del_ticket(nombre)
+        refrescar_fn()
+
+    def _limpiar_carrito(self, refrescar_fn):
+        self.modelo.ticket_actual.clear()
+        self.pagos.clear()
+        self.datos_factura = None
+        refrescar_fn()
+
+    def _pintar_carrito(self, lista_carrito, lbl_desglose, lbl_total, refrescar_fn):
+        lista_carrito.controls.clear()
+        if not self.modelo.ticket_actual:
+            lista_carrito.controls.append(
+                ft.Text("Carrito vacío. Agrega productos desde el catálogo de abajo.", size=12, color="#777777")
+            )
+        else:
+            def on_mod(nombre, delta):
+                self._modificar_item_carrito(nombre, delta, refrescar_fn)
+
+            def on_del(nombre):
+                self._quitar_item_carrito(nombre, refrescar_fn)
+
+            for item in self.modelo.ticket_actual:
+                lista_carrito.controls.append(self._tarjeta_item_carrito(item, on_mod, on_del))
+
+        sub, iva, total = self.modelo.calcular_desglose()
+        lbl_desglose.value = f"Subtotal: ${sub:.2f}  |  IVA (16%): ${iva:.2f}"
+        lbl_total.value = f"TOTAL (IVA incl.): ${total:.2f}"
+        self.safe_update()
+
+    def _pintar_catalogo(self, lista_prods, texto_busqueda, on_agregar):
+        lista_prods.controls.clear()
+        prods = self._filtrar_productos((texto_busqueda or "").strip().lower())
+        if not prods:
+            lista_prods.controls.append(
+                ft.Text("No se encontraron productos disponibles.", size=13, color=COLOR_TEXTO_SUAVE)
+            )
+        else:
+            for prod in prods:
+                lista_prods.controls.append(self._tarjeta_producto(prod, on_agregar))
+        self.safe_update()
+
+    def vista_punto_venta(self):
+        txt_buscar = ft.TextField(label="Buscar producto (nombre o código)", bgcolor=COLOR_BLANCO, dense=True)
         lista_prods = ft.Column(spacing=6)
         lista_carrito = ft.Column(spacing=6)
-        lbl_desglose = ft.Text("", size=12, color="#555555")
+        lbl_desglose = ft.Text("", size=12, color=COLOR_TEXTO_SEC)
         lbl_total = ft.Text("TOTAL: $0.00", size=18, weight=ft.FontWeight.BOLD, color=COLOR_VERDE)
 
         def refrescar_carrito():
-            lista_carrito.controls.clear()
-            if not modelo.ticket_actual:
-                lista_carrito.controls.append(
-                    ft.Text("Carrito vacío. Agrega productos desde el catálogo de abajo.", size=12, color="#777777")
-                )
-            else:
-                for item in modelo.ticket_actual:
-                    nombre = item["producto"]
-                    lista_carrito.controls.append(
-                        ft.Container(
-                            bgcolor="#FFFFFF",
-                            border=borde_all(1, "#DDDDDD"),
-                            border_radius=8,
-                            padding=8,
-                            content=ft.Row(
-                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                controls=[
-                                    ft.Column(
-                                        expand=True,
-                                        spacing=2,
-                                        controls=[
-                                            crear_texto(nombre, weight=ft.FontWeight.BOLD, size=13, max_lines=2),
-                                            ft.Text(
-                                                f"Cant: {item['cantidad']}  |  ${float(item['subtotal']):.2f}",
-                                                size=12,
-                                                color="#555555",
-                                            ),
-                                        ],
-                                    ),
-                                    ft.Row(
-                                        spacing=0,
-                                        tight=True,
-                                        controls=[
-                                            ft.IconButton(
-                                                icon=ICONS.REMOVE_CIRCLE_OUTLINE,
-                                                icon_color="#E67E22",
-                                                on_click=lambda e, n=nombre: modificar_item(n, -1),
-                                            ),
-                                            ft.IconButton(
-                                                icon=ICONS.ADD_CIRCLE_OUTLINE,
-                                                icon_color=COLOR_VERDE,
-                                                on_click=lambda e, n=nombre: modificar_item(n, 1),
-                                            ),
-                                            ft.IconButton(
-                                                icon=ICONS.DELETE_OUTLINE,
-                                                icon_color=COLOR_ROJO,
-                                                on_click=lambda e, n=nombre: quitar_item(n),
-                                            ),
-                                        ],
-                                    ),
-                                ],
-                            ),
-                        )
-                    )
+            self._pintar_carrito(lista_carrito, lbl_desglose, lbl_total, refrescar_carrito)
 
-            sub, iva, total = modelo.calcular_desglose()
-            lbl_desglose.value = f"Subtotal: ${sub:.2f}  |  IVA (16%): ${iva:.2f}"
-            lbl_total.value = f"TOTAL (IVA incl.): ${total:.2f}"
-            safe_update()
-
-        def agregar_item(prod):
-            res = modelo.agregar_al_ticket(prod["nombre"], 1)
-            if res == "stock_insuficiente":
-                mostrar_aviso(f"Sin stock suficiente de {prod['nombre']}.", COLOR_ROJO)
-                return
-            refrescar_carrito()
-
-        def modificar_item(nombre, delta):
-            ok, msg = modelo.actualizar_cantidad_ticket(nombre, delta)
-            if not ok:
-                mostrar_aviso(msg, COLOR_ROJO)
-                return
-            refrescar_carrito()
-
-        def quitar_item(nombre):
-            modelo.quitar_del_ticket(nombre)
-            refrescar_carrito()
-
-        def limpiar_carrito(e):
-            modelo.ticket_actual.clear()
-            sesion["pagos"].clear()
-            sesion["datos_factura"] = None
-            refrescar_carrito()
-
-        def refrescar_catalogo(e=None):
-            lista_prods.controls.clear()
-            texto = (txt_buscar.value or "").strip().lower()
-            prods = [p for p in modelo.inventario if p["stock"] > 0]
-            if texto:
-                prods = [
-                    p
-                    for p in prods
-                    if texto in p["nombre"].lower()
-                    or texto in str(p.get("codigo_barras") or "").lower()
-                ]
-
-            if not prods:
-                lista_prods.controls.append(
-                    ft.Text("No se encontraron productos disponibles.", size=13, color="#666666")
-                )
-            else:
-                for p in prods[:LIMITE_RENDER]:
-                    lista_prods.controls.append(
-                        ft.Container(
-                            bgcolor="#FFFFFF",
-                            border=borde_all(1, "#DDDDDD"),
-                            border_radius=8,
-                            padding=10,
-                            content=ft.Row(
-                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                controls=[
-                                    ft.Column(
-                                        expand=True,
-                                        spacing=2,
-                                        controls=[
-                                            crear_texto(p["nombre"], weight=ft.FontWeight.BOLD, size=13, max_lines=2),
-                                            ft.Text(
-                                                f"${p['precio']:.2f}  |  Stock: {p['stock']}",
-                                                size=12,
-                                                color=COLOR_ROJO if p["stock"] <= p.get("stock_minimo", 5) else "#555555",
-                                            ),
-                                        ],
-                                    ),
-                                    crear_boton(
-                                        "+1",
-                                        on_click=lambda ev, prod=p: agregar_item(prod),
-                                        bgcolor=COLOR_AMARILLO,
-                                        color="#000000",
-                                    ),
-                                ],
-                            ),
-                        )
-                    )
-            safe_update()
+        def refrescar_catalogo(_=None):
+            self._pintar_catalogo(
+                lista_prods,
+                txt_buscar.value,
+                lambda prod: self._agregar_item_carrito(prod, refrescar_carrito),
+            )
 
         txt_buscar.on_change = refrescar_catalogo
         refrescar_catalogo()
         refrescar_carrito()
 
-        # Ticket PRIMERO para que salga hasta arriba en pantalla móvil
+        # Ticket arriba y catálogo abajo para pantallas móviles
         panel_carrito = ft.Container(
             col={"xs": 12, "md": 6},
-            bgcolor="#F4F4F4",
+            bgcolor=COLOR_GRIS_CLARO,
             border=borde_all(1, "#CCCCCC"),
             border_radius=10,
             padding=12,
@@ -726,7 +755,7 @@ def main(page: ft.Page):
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                         controls=[
                             ft.Text("Ticket de Venta", weight=ft.FontWeight.BOLD, size=16, color=COLOR_MARCA),
-                            ft.Text(f"Turno #{sesion['id_turno']}", size=12, color="#666666"),
+                            ft.Text(f"Turno #{self.id_turno}", size=12, color=COLOR_TEXTO_SUAVE),
                         ],
                     ),
                     lista_carrito,
@@ -735,23 +764,22 @@ def main(page: ft.Page):
                     lbl_total,
                     crear_boton(
                         "CONTINUAR A COBROS Y PAGOS",
-                        on_click=lambda e: cambiar_seccion(1),
+                        on_click=lambda _: self.cambiar_seccion(1),
                         bgcolor=COLOR_AMARILLO,
-                        color="#000000",
+                        color=COLOR_NEGRO,
                         height=44,
                     ),
                     crear_boton(
                         "LIMPIAR CARRITO",
-                        on_click=limpiar_carrito,
+                        on_click=lambda _: self._limpiar_carrito(refrescar_carrito),
                         bgcolor=COLOR_ROJO,
-                        color="#FFFFFF",
+                        color=COLOR_BLANCO,
                         height=40,
                     ),
                 ],
             ),
         )
 
-        # Catálogo DESPUÉS para quedar debajo del ticket en celular
         panel_catalogo = ft.Container(
             col={"xs": 12, "md": 6},
             content=ft.Column(
@@ -766,134 +794,242 @@ def main(page: ft.Page):
 
         return ft.ResponsiveRow(controls=[panel_carrito, panel_catalogo], spacing=12, run_spacing=12)
 
-    # =========================================================================
-    # VISTA 1: COBROS Y PAGOS
-    # =========================================================================
-    def vista_cobros():
-        lbl_resumen = ft.Text("", size=13, color="#555555")
+    def _abrir_modal_factura(self, on_actualizado):
+        actual = self.datos_factura or {}
+        e_rfc = ft.TextField(label="RFC", value=actual.get("rfc", ""), bgcolor=COLOR_BLANCO, dense=True)
+        e_razon = ft.TextField(label="Razón Social", value=actual.get("razon_social", ""), bgcolor=COLOR_BLANCO, dense=True)
+        e_regimen = ft.TextField(label="Régimen Fiscal", value=actual.get("regimen", ""), bgcolor=COLOR_BLANCO, dense=True)
+        e_cp = ft.TextField(label="Código Postal", value=actual.get("cp", ""), bgcolor=COLOR_BLANCO, dense=True)
+        e_correo = ft.TextField(label="Correo", value=actual.get("correo", ""), bgcolor=COLOR_BLANCO, dense=True)
+
+        def guardar_fac(_):
+            vals = {
+                "rfc": (e_rfc.value or "").strip().upper(),
+                "razon_social": (e_razon.value or "").strip(),
+                "regimen": (e_regimen.value or "").strip(),
+                "cp": (e_cp.value or "").strip(),
+                "correo": (e_correo.value or "").strip(),
+            }
+            if not all(vals.values()):
+                self.mostrar_aviso("Completa todos los datos fiscales.", COLOR_ROJO)
+                return
+            self.datos_factura = vals
+            self.cerrar_dialogo(dlg_fac)
+            on_actualizado()
+
+        def quitar_fac(_):
+            self.datos_factura = None
+            self.cerrar_dialogo(dlg_fac)
+            on_actualizado()
+
+        acciones = [ft.TextButton(content=ft.Text("Cancelar"), on_click=lambda _: self.cerrar_dialogo(dlg_fac))]
+        if self.datos_factura:
+            acciones.append(crear_boton("Quitar", on_click=quitar_fac, bgcolor=COLOR_ROJO, color=COLOR_BLANCO))
+        acciones.append(crear_boton("Guardar", on_click=guardar_fac, bgcolor=COLOR_VERDE, color=COLOR_BLANCO))
+
+        dlg_fac = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Datos de Facturación"),
+            content=ft.Column(
+                tight=True,
+                scroll=ft.ScrollMode.AUTO,
+                spacing=8,
+                controls=[e_rfc, e_razon, e_regimen, e_cp, e_correo],
+            ),
+            actions=acciones,
+        )
+        self.abrir_dialogo(dlg_fac)
+
+    def _confirmar_cobro(self, on_actualizado):
+        if not self.modelo.ticket_actual:
+            self.mostrar_aviso("El carrito está vacío. Agrega productos en Venta.", COLOR_ROJO)
+            return
+
+        total = self.modelo.calcular_total()
+        pagado = round(sum(p["monto"] for p in self.pagos), 2)
+        if pagado < total:
+            self.mostrar_aviso(f"Faltan ${total - pagado:.2f} por cubrir.", COLOR_ROJO)
+            return
+
+        factura_actual = self.datos_factura.copy() if self.datos_factura else None
+        detalle_items = "\n".join(
+            f"- {i['producto']} x{i['cantidad']} (${float(i['subtotal']):.2f})"
+            for i in self.modelo.ticket_actual
+        )
+
+        def ejecutar_cobro(_):
+            self.cerrar_dialogo(dlg_conf)
+            try:
+                resumen = self.repo_ventas.registrar(
+                    self.modelo.ticket_actual,
+                    self.pagos,
+                    self.id_turno,
+                    datos_factura=factura_actual,
+                )
+            except Exception as ex:
+                self.mostrar_aviso(f"Error al cobrar: {ex}", COLOR_ROJO)
+                return
+
+            self.ultimo_comprobante = {"venta": resumen, "factura": factura_actual}
+            self.modelo.ticket_actual.clear()
+            self.pagos.clear()
+            self.datos_factura = None
+            self.modelo.invalidar_inventario()
+            self.ventas_turno_cache = None
+            self.mostrar_aviso(f"Venta {resumen['folio']} registrada. Cambio: ${resumen['cambio']:.2f}", COLOR_VERDE)
+            on_actualizado()
+
+        rfc_texto = factura_actual["rfc"] if factura_actual else "No solicitada"
+        dlg_conf = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Confirmar Venta"),
+            content=ft.Column(
+                tight=True,
+                scroll=ft.ScrollMode.AUTO,
+                spacing=6,
+                controls=[
+                    ft.Text(detalle_items, size=12),
+                    ft.Divider(),
+                    ft.Text(
+                        f"Total: ${total:.2f}  |  Recibido: ${pagado:.2f}  |  Cambio: ${pagado - total:.2f}",
+                        weight=ft.FontWeight.BOLD,
+                        size=13,
+                    ),
+                    ft.Text(f"Factura: {rfc_texto}", size=12),
+                    ft.Text(
+                        "Verifica los productos antes de emitir el ticket. No se aceptan cancelaciones, cambios ni devoluciones.",
+                        size=12,
+                        color=COLOR_ROJO,
+                    ),
+                ],
+            ),
+            actions=[
+                ft.TextButton(content=ft.Text("Revisar"), on_click=lambda _: self.cerrar_dialogo(dlg_conf)),
+                crear_boton("Confirmar y Emitir", on_click=ejecutar_cobro, bgcolor=COLOR_VERDE, color=COLOR_BLANCO),
+            ],
+        )
+        self.abrir_dialogo(dlg_conf)
+
+    def _quitar_pago(self, indice, on_refrescar):
+        self.pagos.pop(indice)
+        on_refrescar()
+
+    def _limpiar_pagos(self, on_refrescar):
+        self.pagos.clear()
+        on_refrescar()
+
+    def _pintar_lista_pagos(self, lista_pagos, on_refrescar):
+        lista_pagos.controls.clear()
+        if not self.pagos:
+            lista_pagos.controls.append(ft.Text("Sin pagos agregados.", size=12, color="#777777"))
+            return
+
+        for idx, pago in enumerate(self.pagos):
+            ref_txt = f" | Ref: {pago['referencia']}" if pago.get("referencia") else ""
+            nombre_m = NOMBRES_METODO.get(pago["id_metodo_pago"], "Pago")
+            lista_pagos.controls.append(
+                ft.Container(
+                    bgcolor=COLOR_BLANCO,
+                    border=borde_all(1, COLOR_BORDE),
+                    border_radius=8,
+                    padding=8,
+                    content=ft.Row(
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        controls=[
+                            ft.Text(f"{nombre_m}{ref_txt}", size=13, expand=True),
+                            ft.Text(f"${pago['monto']:.2f}", weight=ft.FontWeight.BOLD, size=13),
+                            ft.IconButton(
+                                icon=ICONS.DELETE_OUTLINE,
+                                icon_color=COLOR_ROJO,
+                                on_click=lambda _, i=idx: self._quitar_pago(i, on_refrescar),
+                            ),
+                        ],
+                    ),
+                )
+            )
+
+    def _pintar_botones_comprobante(self, panel_comprobante):
+        panel_comprobante.controls.clear()
+        if not self.ultimo_comprobante:
+            return
+        venta = self.ultimo_comprobante["venta"]
+        factura = self.ultimo_comprobante.get("factura")
+        botones = [
+            crear_boton(
+                f"DESCARGAR TICKET ({venta['folio']})",
+                on_click=lambda _, v=venta: self.descargar_comprobante_ticket(v),
+                bgcolor=COLOR_AZUL,
+                color=COLOR_BLANCO,
+                icon=ICON_DESCARGA,
+                height=42,
+            )
+        ]
+        if factura:
+            folio_f = venta.get("folio_factura") or venta["folio"]
+            botones.append(
+                crear_boton(
+                    f"DESCARGAR FACTURA ({folio_f})",
+                    on_click=lambda _, v=venta, f=factura: self.descargar_comprobante_factura(v, f),
+                    bgcolor=COLOR_MORADO,
+                    color=COLOR_BLANCO,
+                    icon=ICON_DESCARGA,
+                    height=42,
+                )
+            )
+        panel_comprobante.controls.extend([ft.Divider(), *botones])
+
+    def _validar_y_agregar_pago(self, metodo, monto_str, ref_str):
+        try:
+            monto = round(float((monto_str or "").strip()), 2)
+            if monto <= 0:
+                raise ValueError
+        except ValueError:
+            self.mostrar_aviso("Ingresa un monto válido.", COLOR_ROJO)
+            return False
+
+        id_m = METODOS_ID.get(metodo, 1)
+        ref = None
+        if id_m != 1:
+            ref = (ref_str or "").strip()
+            if not ref:
+                self.mostrar_aviso("Ingresa la referencia de la tarjeta.", COLOR_ROJO)
+                return False
+
+        self.pagos.append({"id_metodo_pago": id_m, "monto": monto, "referencia": ref})
+        return True
+
+    def vista_cobros(self):
+        lbl_resumen = ft.Text("", size=13, color=COLOR_TEXTO_SEC)
         lbl_total = ft.Text("$0.00", size=26, weight=ft.FontWeight.BOLD, color=COLOR_VERDE)
         lbl_estado_pago = ft.Text("", size=13, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)
-        lbl_factura = ft.Text("", size=12, color="#666666", text_align=ft.TextAlign.CENTER)
+        lbl_factura = ft.Text("", size=12, color=COLOR_TEXTO_SUAVE, text_align=ft.TextAlign.CENTER)
         lista_pagos = ft.Column(spacing=6)
         panel_comprobante = ft.Column(spacing=6, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
 
         cmb_metodo = ft.Dropdown(
             label="Método de pago",
-            value="Efectivo",
+            value=METODO_EFECTIVO,
             options=[
-                OPT_CLS(key="Efectivo", text="Efectivo"),
-                OPT_CLS(key="Tarjeta de débito", text="Tarjeta de débito"),
-                OPT_CLS(key="Tarjeta de crédito", text="Tarjeta de crédito"),
+                OPT_CLS(key=METODO_EFECTIVO, text=METODO_EFECTIVO),
+                OPT_CLS(key=METODO_DEBITO, text=METODO_DEBITO),
+                OPT_CLS(key=METODO_CREDITO, text=METODO_CREDITO),
             ],
         )
-        txt_monto = ft.TextField(label="Monto ($)", keyboard_type=ft.KeyboardType.NUMBER, bgcolor="#FFFFFF", dense=True)
-        txt_ref = ft.TextField(label="Referencia tarjeta (si aplica)", bgcolor="#FFFFFF", disabled=True, dense=True)
+        txt_monto = ft.TextField(label="Monto ($)", keyboard_type=ft.KeyboardType.NUMBER, bgcolor=COLOR_BLANCO, dense=True)
+        txt_ref = ft.TextField(label="Referencia tarjeta (si aplica)", bgcolor=COLOR_BLANCO, disabled=True, dense=True)
 
-        def on_metodo_change(e):
-            es_ef = cmb_metodo.value == "Efectivo"
+        def on_metodo_change(_):
+            es_ef = cmb_metodo.value == METODO_EFECTIVO
             txt_ref.disabled = es_ef
             if es_ef:
                 txt_ref.value = ""
-            safe_update()
+            self.safe_update()
 
         conectar_dropdown(cmb_metodo, on_metodo_change)
 
-        def refrescar_estado_factura():
-            df = sesion.get("datos_factura")
-            if df:
-                lbl_factura.value = f"Factura: {df['rfc']} ({df['razon_social']})"
-                lbl_factura.color = COLOR_VERDE
-            else:
-                lbl_factura.value = "Factura: No solicitada"
-                lbl_factura.color = "#666666"
-
-        def refrescar_comprobante():
-            panel_comprobante.controls.clear()
-            comp = sesion.get("ultimo_comprobante")
-            if not comp:
-                return
-            venta = comp["venta"]
-            factura = comp.get("factura")
-            botones = [
-                crear_boton(
-                    f"DESCARGAR TICKET ({venta['folio']})",
-                    on_click=lambda e, v=venta: descargar_comprobante_ticket(v),
-                    bgcolor=COLOR_AZUL,
-                    color="#FFFFFF",
-                    height=42,
-                    icon=ICON_DESCARGA,
-                )
-            ]
-            if factura:
-                botones.append(
-                    crear_boton(
-                        f"DESCARGAR FACTURA ({venta.get('folio_factura') or venta['folio']})",
-                        on_click=lambda e, v=venta, f=factura: descargar_comprobante_factura(v, f),
-                        bgcolor=COLOR_MORADO,
-                        color="#FFFFFF",
-                        height=42,
-                        icon=ICON_DESCARGA,
-                    )
-                )
-            panel_comprobante.controls.extend([ft.Divider(), *botones])
-
-        def abrir_modal_factura(e):
-            actual = sesion.get("datos_factura") or {}
-            e_rfc = ft.TextField(label="RFC", value=actual.get("rfc", ""), bgcolor="#FFFFFF", dense=True)
-            e_razon = ft.TextField(label="Razón Social", value=actual.get("razon_social", ""), bgcolor="#FFFFFF", dense=True)
-            e_regimen = ft.TextField(label="Régimen Fiscal", value=actual.get("regimen", ""), bgcolor="#FFFFFF", dense=True)
-            e_cp = ft.TextField(label="Código Postal", value=actual.get("cp", ""), bgcolor="#FFFFFF", dense=True)
-            e_correo = ft.TextField(label="Correo", value=actual.get("correo", ""), bgcolor="#FFFFFF", dense=True)
-
-            def guardar_fac(ev):
-                vals = {
-                    "rfc": (e_rfc.value or "").strip().upper(),
-                    "razon_social": (e_razon.value or "").strip(),
-                    "regimen": (e_regimen.value or "").strip(),
-                    "cp": (e_cp.value or "").strip(),
-                    "correo": (e_correo.value or "").strip(),
-                }
-                if not all(vals.values()):
-                    mostrar_aviso("Completa todos los datos fiscales.", COLOR_ROJO)
-                    return
-                sesion["datos_factura"] = vals
-                refrescar_estado_factura()
-                cerrar_dialogo(dlg_fac)
-                safe_update()
-
-            def quitar_fac(ev):
-                sesion["datos_factura"] = None
-                refrescar_estado_factura()
-                cerrar_dialogo(dlg_fac)
-                safe_update()
-
-            acciones = [
-                ft.TextButton(content=ft.Text("Cancelar"), on_click=lambda ev: cerrar_dialogo(dlg_fac)),
-            ]
-            if sesion.get("datos_factura"):
-                acciones.append(
-                    crear_boton("Quitar", on_click=quitar_fac, bgcolor=COLOR_ROJO, color="#FFFFFF")
-                )
-            acciones.append(
-                crear_boton("Guardar", on_click=guardar_fac, bgcolor=COLOR_VERDE, color="#FFFFFF")
-            )
-
-            dlg_fac = ft.AlertDialog(
-                modal=True,
-                title=ft.Text("Datos de Facturación"),
-                content=ft.Column(
-                    tight=True,
-                    scroll=ft.ScrollMode.AUTO,
-                    spacing=8,
-                    controls=[e_rfc, e_razon, e_regimen, e_cp, e_correo],
-                ),
-                actions=acciones,
-            )
-            abrir_dialogo(dlg_fac)
-
         def refrescar_pagos():
-            sub, iva, total = modelo.calcular_desglose()
-            pagado = round(sum(p["monto"] for p in sesion["pagos"]), 2)
+            sub, iva, total = self.modelo.calcular_desglose()
+            pagado = round(sum(p["monto"] for p in self.pagos), 2)
             restante = round(max(0.0, total - pagado), 2)
             cambio = round(max(0.0, pagado - total), 2)
 
@@ -904,134 +1040,24 @@ def main(page: ft.Page):
             if restante > 0 and not txt_monto.value:
                 txt_monto.value = f"{restante:.2f}"
 
-            lista_pagos.controls.clear()
-            if not sesion["pagos"]:
-                lista_pagos.controls.append(ft.Text("Sin pagos agregados.", size=12, color="#777777"))
-            else:
-                nombres_m = {1: "Efectivo", 2: "Tarjeta débito", 3: "Tarjeta crédito"}
-                for idx, p in enumerate(sesion["pagos"]):
-                    ref_txt = f" | Ref: {p['referencia']}" if p.get("referencia") else ""
-                    lista_pagos.controls.append(
-                        ft.Container(
-                            bgcolor="#FFFFFF",
-                            border=borde_all(1, "#DDDDDD"),
-                            border_radius=8,
-                            padding=8,
-                            content=ft.Row(
-                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                                controls=[
-                                    ft.Text(f"{nombres_m.get(p['id_metodo_pago'], 'Pago')}{ref_txt}", size=13, expand=True),
-                                    ft.Text(f"${p['monto']:.2f}", weight=ft.FontWeight.BOLD, size=13),
-                                    ft.IconButton(
-                                        icon=ICONS.DELETE_OUTLINE,
-                                        icon_color=COLOR_ROJO,
-                                        on_click=lambda e, i=idx: (sesion["pagos"].pop(i), refrescar_pagos()),
-                                    ),
-                                ],
-                            ),
-                        )
-                    )
-            refrescar_estado_factura()
-            refrescar_comprobante()
-            safe_update()
+            self._pintar_lista_pagos(lista_pagos, refrescar_pagos)
+            df = self.datos_factura
+            lbl_factura.value = f"Factura: {df['rfc']} ({df['razon_social']})" if df else "Factura: No solicitada"
+            lbl_factura.color = COLOR_VERDE if df else COLOR_TEXTO_SUAVE
+            self._pintar_botones_comprobante(panel_comprobante)
+            self.safe_update()
 
-        def agregar_pago(e):
-            try:
-                monto = round(float((txt_monto.value or "").strip()), 2)
-                if monto <= 0:
-                    raise ValueError
-            except ValueError:
-                mostrar_aviso("Ingresa un monto válido.", COLOR_ROJO)
-                return
-
-            metodo = cmb_metodo.value
-            id_m = 1 if metodo == "Efectivo" else (2 if metodo == "Tarjeta de débito" else 3)
-            ref = None
-            if id_m != 1:
-                ref = (txt_ref.value or "").strip()
-                if not ref:
-                    mostrar_aviso("Ingresa la referencia de la tarjeta.", COLOR_ROJO)
-                    return
-
-            sesion["pagos"].append({"id_metodo_pago": id_m, "monto": monto, "referencia": ref})
-            txt_monto.value = ""
-            txt_ref.value = ""
-            refrescar_pagos()
-
-        def confirmar_cobro(e):
-            if not modelo.ticket_actual:
-                mostrar_aviso("El carrito está vacío. Agrega productos en Venta.", COLOR_ROJO)
-                return
-            total = modelo.calcular_total()
-            pagado = round(sum(p["monto"] for p in sesion["pagos"]), 2)
-            if pagado < total:
-                mostrar_aviso(f"Faltan ${total - pagado:.2f} por cubrir.", COLOR_ROJO)
-                return
-
-            factura_actual = dict(sesion["datos_factura"]) if sesion.get("datos_factura") else None
-            detalle_items = "\n".join(
-                f"- {i['producto']} x{i['cantidad']} (${float(i['subtotal']):.2f})"
-                for i in modelo.ticket_actual
-            )
-
-            def ejecutar_cobro(ev):
-                cerrar_dialogo(dlg_conf)
-                try:
-                    resumen = repo_ventas.registrar(
-                        modelo.ticket_actual,
-                        sesion["pagos"],
-                        sesion["id_turno"],
-                        datos_factura=factura_actual,
-                    )
-                    sesion["ultimo_comprobante"] = {"venta": resumen, "factura": factura_actual}
-                    modelo.ticket_actual.clear()
-                    sesion["pagos"].clear()
-                    sesion["datos_factura"] = None
-                    modelo.invalidar_inventario()
-                    sesion["ventas_turno_cache"] = None
-                    mostrar_aviso(
-                        f"Venta {resumen['folio']} registrada. Cambio: ${resumen['cambio']:.2f}",
-                        COLOR_VERDE,
-                    )
-                    refrescar_pagos()
-                except Exception as ex:
-                    mostrar_aviso(f"Error al cobrar: {ex}", COLOR_ROJO)
-
-            dlg_conf = ft.AlertDialog(
-                modal=True,
-                title=ft.Text("Confirmar Venta"),
-                content=ft.Column(
-                    tight=True,
-                    scroll=ft.ScrollMode.AUTO,
-                    spacing=6,
-                    controls=[
-                        ft.Text(detalle_items, size=12),
-                        ft.Divider(),
-                        ft.Text(
-                            f"Total: ${total:.2f}  |  Recibido: ${pagado:.2f}  |  Cambio: ${pagado - total:.2f}",
-                            weight=ft.FontWeight.BOLD,
-                            size=13,
-                        ),
-                        ft.Text(f"Factura: {factura_actual['rfc'] if factura_actual else 'No solicitada'}", size=12),
-                        ft.Text(
-                            "Verifica los productos antes de emitir el ticket. No se aceptan cancelaciones, cambios ni devoluciones.",
-                            size=12,
-                            color=COLOR_ROJO,
-                        ),
-                    ],
-                ),
-                actions=[
-                    ft.TextButton(content=ft.Text("Revisar"), on_click=lambda ev: cerrar_dialogo(dlg_conf)),
-                    crear_boton("Confirmar y Emitir", on_click=ejecutar_cobro, bgcolor=COLOR_VERDE, color="#FFFFFF"),
-                ],
-            )
-            abrir_dialogo(dlg_conf)
+        def on_agregar_pago(_):
+            if self._validar_y_agregar_pago(cmb_metodo.value, txt_monto.value, txt_ref.value):
+                txt_monto.value = ""
+                txt_ref.value = ""
+                refrescar_pagos()
 
         refrescar_pagos()
 
         return ft.Container(
-            bgcolor="#FFFFFF",
-            border=borde_all(1, "#DDDDDD"),
+            bgcolor=COLOR_BLANCO,
+            border=borde_all(1, COLOR_BORDE),
             border_radius=10,
             padding=14,
             content=ft.Column(
@@ -1046,146 +1072,144 @@ def main(page: ft.Page):
                     txt_ref,
                     ft.Row(
                         controls=[
-                            crear_boton("+ AGREGAR PAGO", on_click=agregar_pago, bgcolor=COLOR_VERDE, color="#FFFFFF", expand=True, height=42),
-                            crear_boton("LIMPIAR", on_click=lambda e: (sesion["pagos"].clear(), refrescar_pagos()), bgcolor=COLOR_ROJO, color="#FFFFFF", height=42),
+                            crear_boton("+ AGREGAR PAGO", on_click=on_agregar_pago, bgcolor=COLOR_VERDE, color=COLOR_BLANCO, expand=True, height=42),
+                            crear_boton("LIMPIAR", on_click=lambda _: self._limpiar_pagos(refrescar_pagos), bgcolor=COLOR_ROJO, color=COLOR_BLANCO, height=42),
                         ]
                     ),
                     lista_pagos,
                     ft.Divider(),
                     lbl_factura,
-                    crear_boton("AGREGAR / EDITAR FACTURA", on_click=abrir_modal_factura, bgcolor=COLOR_MORADO, color="#FFFFFF", height=40),
-                    crear_boton("CONFIRMAR COBRO", on_click=confirmar_cobro, bgcolor=COLOR_AMARILLO, color="#000000", height=46),
+                    crear_boton("AGREGAR / EDITAR FACTURA", on_click=lambda _: self._abrir_modal_factura(refrescar_pagos), bgcolor=COLOR_MORADO, color=COLOR_BLANCO, height=40),
+                    crear_boton("CONFIRMAR COBRO", on_click=lambda _: self._confirmar_cobro(refrescar_pagos), bgcolor=COLOR_AMARILLO, color=COLOR_NEGRO, height=46),
                     panel_comprobante,
                 ],
             ),
         )
 
-    def vista_tickets():
-        lista_tickets = ft.Column(spacing=8)
-        lbl_estado = ft.Text(f"Cargando tickets del Turno #{sesion['id_turno']}...", size=13, color="#555555")
+    def _cargar_ventas_turno_async(self, forzar, on_exito, on_cargando, on_error):
+        if not forzar and self.ventas_turno_cache is not None:
+            on_exito(self.ventas_turno_cache)
+            return
 
-        def ver_detalle_ticket(venta):
-            lineas = [
-                f"Folio: {venta.get('folio', 'N/D')}",
-                f"Turno: #{sesion['id_turno']}",
-                f"Fecha: {venta.get('fecha', 'N/D')}",
-                f"Método: {venta.get('metodo_pago', 'N/D')}",
-                f"Estado factura: {venta.get('estado_factura', 'Sin Factura')}",
-                "",
-                "PRODUCTOS:",
-            ]
-            for art in venta.get("articulos", []):
-                lineas.append(f"- {art.get('producto', 'Producto')} x{art.get('cantidad', 0)} (${float(art.get('subtotal', 0)):.2f})")
-            lineas.extend(["", f"Importe del ticket: ${float(venta.get('total', 0)):.2f}"])
+        on_cargando()
+        turno_objetivo = self.id_turno
 
-            def on_descargar_desde_detalle(ev):
-                cerrar_dialogo(dlg)
-                descargar_comprobante_ticket(venta)
+        def worker():
+            try:
+                ventas = self.obtener_ventas_del_turno(turno_objetivo)
+                if self.id_turno == turno_objetivo:
+                    self.ventas_turno_cache = ventas
+                    on_exito(ventas)
+            except Exception as exc:
+                on_error(exc)
 
-            dlg = ft.AlertDialog(
-                modal=True,
-                title=ft.Text(f"Ticket {venta.get('folio', '')}"),
-                content=ft.Column(tight=True, scroll=ft.ScrollMode.AUTO, controls=[ft.Text("\n".join(lineas), size=13)]),
-                actions=[
-                    ft.TextButton(content=ft.Text("Cerrar"), on_click=lambda e: cerrar_dialogo(dlg)),
-                    crear_boton(
-                        "DESCARGAR PDF",
-                        on_click=on_descargar_desde_detalle,
-                        bgcolor=COLOR_AMARILLO,
-                        color="#000000",
-                        icon=ICON_DESCARGA,
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _ver_detalle_ticket(self, venta):
+        lineas = [
+            f"Folio: {venta.get('folio', 'N/D')}",
+            f"Turno: #{self.id_turno}",
+            f"Fecha: {venta.get('fecha', 'N/D')}",
+            f"Método: {venta.get('metodo_pago', 'N/D')}",
+            f"Estado factura: {venta.get('estado_factura', ESTADO_SIN_FACTURA)}",
+            "",
+            "PRODUCTOS:",
+        ]
+        for art in venta.get("articulos", []):
+            lineas.append(f"- {art.get('producto', 'Producto')} x{art.get('cantidad', 0)} (${float(art.get('subtotal', 0)):.2f})")
+        lineas.extend(["", f"Importe del ticket: ${float(venta.get('total', 0)):.2f}"])
+
+        def descargar_y_cerrar(_):
+            self.cerrar_dialogo(dlg)
+            self.descargar_comprobante_ticket(venta)
+
+        dlg = ft.AlertDialog(
+            modal=True,
+            title=ft.Text(f"Ticket {venta.get('folio', '')}"),
+            content=ft.Column(tight=True, scroll=ft.ScrollMode.AUTO, controls=[ft.Text("\n".join(lineas), size=13)]),
+            actions=[
+                ft.TextButton(content=ft.Text(TXT_CERRAR), on_click=lambda _: self.cerrar_dialogo(dlg)),
+                crear_boton(
+                    TXT_DESCARGAR_PDF,
+                    on_click=descargar_y_cerrar,
+                    bgcolor=COLOR_AMARILLO,
+                    color=COLOR_NEGRO,
+                    icon=ICON_DESCARGA,
+                ),
+            ],
+        )
+        self.abrir_dialogo(dlg)
+
+    def _tarjeta_ticket(self, venta):
+        return ft.Container(
+            bgcolor=COLOR_BLANCO,
+            border=borde_all(1, COLOR_BORDE),
+            border_radius=8,
+            padding=10,
+            content=ft.Row(
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                controls=[
+                    ft.Column(
+                        expand=True,
+                        spacing=2,
+                        controls=[
+                            ft.Text(f"{venta.get('folio', '')}  |  ${float(venta.get('total', 0)):.2f}", weight=ft.FontWeight.BOLD, size=14),
+                            ft.Text(f"{venta.get('fecha', '')} | {venta.get('metodo_pago', '')}", size=12, color=COLOR_TEXTO_SEC),
+                            ft.Text(venta.get("estado_factura", ESTADO_SIN_FACTURA), size=11, color=COLOR_AZUL),
+                        ],
+                    ),
+                    ft.Row(
+                        spacing=4,
+                        tight=True,
+                        controls=[
+                            ft.IconButton(
+                                icon=ICONS.VISIBILITY,
+                                icon_color=COLOR_AZUL,
+                                tooltip="Ver detalle",
+                                on_click=lambda _, v=venta: self._ver_detalle_ticket(v),
+                            ),
+                            crear_boton(
+                                "PDF",
+                                on_click=lambda _, v=venta: self.descargar_comprobante_ticket(v),
+                                bgcolor=COLOR_AMARILLO,
+                                color=COLOR_NEGRO,
+                                icon=ICON_DESCARGA,
+                            ),
+                        ],
                     ),
                 ],
-            )
-            abrir_dialogo(dlg)
+            ),
+        )
+
+    def vista_tickets(self):
+        lista_tickets = ft.Column(spacing=8)
+        id_turno = self.id_turno
+        lbl_estado = ft.Text(f"Cargando tickets del Turno #{id_turno}...", size=13, color=COLOR_TEXTO_SEC)
 
         def pintar_tickets(ventas):
             lista_tickets.controls.clear()
             if not ventas:
-                lbl_estado.value = f"Aún no hay tickets emitidos en el Turno #{sesion['id_turno']}."
+                lbl_estado.value = f"Aún no hay tickets emitidos en el Turno #{id_turno}."
             else:
-                lbl_estado.value = f"Turno #{sesion['id_turno']} - Tickets emitidos: {len(ventas)}"
-                for v in ventas:
-                    lista_tickets.controls.append(
-                        ft.Container(
-                            bgcolor="#FFFFFF",
-                            border=borde_all(1, "#DDDDDD"),
-                            border_radius=8,
-                            padding=10,
-                            content=ft.Row(
-                                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                                controls=[
-                                    ft.Column(
-                                        expand=True,
-                                        spacing=2,
-                                        controls=[
-                                            ft.Text(
-                                                f"{v.get('folio', '')}  |  ${float(v.get('total', 0)):.2f}",
-                                                weight=ft.FontWeight.BOLD,
-                                                size=14,
-                                            ),
-                                            ft.Text(
-                                                f"{v.get('fecha', '')} | {v.get('metodo_pago', '')}",
-                                                size=12,
-                                                color="#555555",
-                                            ),
-                                            ft.Text(
-                                                v.get("estado_factura", "Sin Factura"),
-                                                size=11,
-                                                color=COLOR_AZUL,
-                                            ),
-                                        ],
-                                    ),
-                                    ft.Row(
-                                        spacing=4,
-                                        tight=True,
-                                        controls=[
-                                            ft.IconButton(
-                                                icon=ICONS.VISIBILITY,
-                                                icon_color=COLOR_AZUL,
-                                                tooltip="Ver detalle",
-                                                on_click=lambda e, venta=v: ver_detalle_ticket(venta),
-                                            ),
-                                            crear_boton(
-                                                "PDF",
-                                                on_click=lambda e, venta=v: descargar_comprobante_ticket(venta),
-                                                bgcolor=COLOR_AMARILLO,
-                                                color="#000000",
-                                                icon=ICON_DESCARGA,
-                                            ),
-                                        ],
-                                    ),
-                                ],
-                            ),
-                        )
-                    )
-            safe_update()
+                lbl_estado.value = f"Turno #{id_turno} - Tickets emitidos: {len(ventas)}"
+                for venta in ventas:
+                    lista_tickets.controls.append(self._tarjeta_ticket(venta))
+            self.safe_update()
 
-        def cargar_datos(forzar=False):
-            if not forzar and sesion["ventas_turno_cache"] is not None:
-                pintar_tickets(sesion["ventas_turno_cache"])
-                return
-
-            lbl_estado.value = f"Consultando tickets del Turno #{sesion['id_turno']}..."
+        def on_cargando():
+            lbl_estado.value = f"Consultando tickets del Turno #{id_turno}..."
             lista_tickets.controls.clear()
-            safe_update()
+            self.safe_update()
 
-            turno_objetivo = sesion["id_turno"]
+        def on_error(exc):
+            lbl_estado.value = f"Error al cargar tickets: {exc}"
+            self.safe_update()
 
-            def _worker():
-                try:
-                    ventas = obtener_ventas_del_turno(turno_objetivo)
-                    if sesion["id_turno"] == turno_objetivo:
-                        sesion["ventas_turno_cache"] = ventas
-                        pintar_tickets(ventas)
-                except Exception as exc:
-                    lbl_estado.value = f"Error al cargar tickets: {exc}"
-                    safe_update()
+        def recargar(forzar=False):
+            self._cargar_ventas_turno_async(forzar, pintar_tickets, on_cargando, on_error)
 
-            threading.Thread(target=_worker, daemon=True).start()
-
-        cargar_datos(forzar=False)
+        recargar(forzar=False)
 
         return ft.Column(
             spacing=10,
@@ -1195,7 +1219,7 @@ def main(page: ft.Page):
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     controls=[
                         ft.Text("Tickets del Turno", weight=ft.FontWeight.BOLD, size=17, color=COLOR_MARCA),
-                        crear_boton("ACTUALIZAR", on_click=lambda e: cargar_datos(forzar=True), bgcolor=COLOR_AZUL, color="#FFFFFF"),
+                        crear_boton(TXT_ACTUALIZAR, on_click=lambda _: recargar(forzar=True), bgcolor=COLOR_AZUL, color=COLOR_BLANCO),
                     ],
                 ),
                 lbl_estado,
@@ -1203,94 +1227,81 @@ def main(page: ft.Page):
             ],
         )
 
-    def vista_historial():
+    def _coincide_filtro_venta(self, venta, texto):
+        if texto in str(venta.get("folio", "")).lower():
+            return True
+        if texto in str(venta.get("metodo_pago", "")).lower():
+            return True
+        return any(texto in str(a.get("producto", "")).lower() for a in venta.get("articulos", []))
+
+    def _tarjeta_historial(self, venta):
+        prods_txt = ", ".join(
+            f"{a.get('producto', '')} (x{a.get('cantidad', 0)})" for a in venta.get("articulos", [])
+        )
+        return ft.Container(
+            bgcolor=COLOR_BLANCO,
+            border=borde_all(1, COLOR_BORDE),
+            border_radius=8,
+            padding=10,
+            content=ft.Column(
+                spacing=4,
+                controls=[
+                    ft.Row(
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        controls=[
+                            ft.Text(venta.get("folio", ""), weight=ft.FontWeight.BOLD, size=14, color=COLOR_MARCA),
+                            ft.Text(f"${float(venta.get('total', 0)):.2f}", weight=ft.FontWeight.BOLD, size=14, color=COLOR_VERDE),
+                        ],
+                    ),
+                    ft.Text(
+                        f"{venta.get('fecha', '')}  |  {venta.get('metodo_pago', '')}  |  {venta.get('estado_factura', ESTADO_SIN_FACTURA)}",
+                        size=11,
+                        color=COLOR_TEXTO_SEC,
+                    ),
+                    ft.Text(prods_txt or "Sin detalle", size=12, color="#222222"),
+                ],
+            ),
+        )
+
+    def vista_historial(self):
+        id_turno = self.id_turno
         txt_filtro = ft.TextField(
             label="Buscar folio o producto en este turno",
-            bgcolor="#FFFFFF",
+            bgcolor=COLOR_BLANCO,
             dense=True,
             expand=True,
         )
-        lbl_info = ft.Text(f"Ventas del Turno #{sesion['id_turno']}", size=13, weight=ft.FontWeight.BOLD, color=COLOR_AZUL)
+        lbl_info = ft.Text(f"Ventas del Turno #{id_turno}", size=13, weight=ft.FontWeight.BOLD, color=COLOR_AZUL)
         lista_hist = ft.Column(spacing=6)
 
         def pintar_historial(ventas):
             q = (txt_filtro.value or "").strip().lower()
-            if q:
-                filtradas = [
-                    v
-                    for v in ventas
-                    if q in str(v.get("folio", "")).lower()
-                    or q in str(v.get("metodo_pago", "")).lower()
-                    or any(q in str(a.get("producto", "")).lower() for a in v.get("articulos", []))
-                ]
-            else:
-                filtradas = list(ventas)
-
-            # No se muestra ningún Total Registrado acumulado del turno
-            lbl_info.value = f"Turno #{sesion['id_turno']} - Operaciones registradas: {len(filtradas)}"
+            filtradas = [v for v in ventas if self._coincide_filtro_venta(v, q)] if q else ventas[:]
+            lbl_info.value = f"Turno #{id_turno} - Operaciones registradas: {len(filtradas)}"
 
             lista_hist.controls.clear()
             if not filtradas:
                 lista_hist.controls.append(
-                    ft.Text("No hay ventas registradas en este turno con ese criterio.", size=13, color="#666666")
+                    ft.Text("No hay ventas registradas en este turno con ese criterio.", size=13, color=COLOR_TEXTO_SUAVE)
                 )
             else:
-                for v in filtradas:
-                    prods_txt = ", ".join(
-                        f"{a.get('producto', '')} (x{a.get('cantidad', 0)})" for a in v.get("articulos", [])
-                    )
-                    lista_hist.controls.append(
-                        ft.Container(
-                            bgcolor="#FFFFFF",
-                            border=borde_all(1, "#DDDDDD"),
-                            border_radius=8,
-                            padding=10,
-                            content=ft.Column(
-                                spacing=4,
-                                controls=[
-                                    ft.Row(
-                                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                                        controls=[
-                                            ft.Text(v.get("folio", ""), weight=ft.FontWeight.BOLD, size=14, color=COLOR_MARCA),
-                                            ft.Text(f"${float(v.get('total', 0)):.2f}", weight=ft.FontWeight.BOLD, size=14, color=COLOR_VERDE),
-                                        ],
-                                    ),
-                                    ft.Text(
-                                        f"{v.get('fecha', '')}  |  {v.get('metodo_pago', '')}  |  {v.get('estado_factura', 'Sin Factura')}",
-                                        size=11,
-                                        color="#555555",
-                                    ),
-                                    ft.Text(prods_txt or "Sin detalle", size=12, color="#222222"),
-                                ],
-                            ),
-                        )
-                    )
-            safe_update()
+                for venta in filtradas:
+                    lista_hist.controls.append(self._tarjeta_historial(venta))
+            self.safe_update()
 
-        def cargar_historial(e=None, forzar=False):
-            if not forzar and sesion["ventas_turno_cache"] is not None:
-                pintar_historial(sesion["ventas_turno_cache"])
-                return
-
-            lbl_info.value = f"Consultando ventas del Turno #{sesion['id_turno']}..."
+        def on_cargando():
+            lbl_info.value = f"Consultando ventas del Turno #{id_turno}..."
             lista_hist.controls.clear()
-            safe_update()
+            self.safe_update()
 
-            turno_objetivo = sesion["id_turno"]
+        def on_error(exc):
+            lbl_info.value = f"Error al consultar ventas: {exc}"
+            self.safe_update()
 
-            def _worker():
-                try:
-                    ventas = obtener_ventas_del_turno(turno_objetivo)
-                    if sesion["id_turno"] == turno_objetivo:
-                        sesion["ventas_turno_cache"] = ventas
-                        pintar_historial(ventas)
-                except Exception as exc:
-                    lbl_info.value = f"Error al consultar ventas: {exc}"
-                    safe_update()
+        def cargar_historial(forzar=False):
+            self._cargar_ventas_turno_async(forzar, pintar_historial, on_cargando, on_error)
 
-            threading.Thread(target=_worker, daemon=True).start()
-
-        txt_filtro.on_change = lambda e: cargar_historial(forzar=False)
+        txt_filtro.on_change = lambda _: cargar_historial(forzar=False)
         cargar_historial(forzar=False)
 
         return ft.Column(
@@ -1301,13 +1312,13 @@ def main(page: ft.Page):
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
                     controls=[
                         ft.Text("Historial del Turno", weight=ft.FontWeight.BOLD, size=17, color=COLOR_MARCA),
-                        crear_boton("ACTUALIZAR", on_click=lambda e: cargar_historial(forzar=True), bgcolor=COLOR_AZUL, color="#FFFFFF"),
+                        crear_boton(TXT_ACTUALIZAR, on_click=lambda _: cargar_historial(forzar=True), bgcolor=COLOR_AZUL, color=COLOR_BLANCO),
                     ],
                 ),
                 ft.Row(
                     controls=[
                         txt_filtro,
-                        crear_boton("BUSCAR", on_click=lambda e: cargar_historial(forzar=False), bgcolor=COLOR_AMARILLO, color="#000000"),
+                        crear_boton("BUSCAR", on_click=lambda _: cargar_historial(forzar=False), bgcolor=COLOR_AMARILLO, color=COLOR_NEGRO),
                     ]
                 ),
                 lbl_info,
@@ -1315,16 +1326,119 @@ def main(page: ft.Page):
             ],
         )
 
-    # =========================================================================
-    # VISTA 4: CIERRE DE CAJA (CORTE CIEGO SIN MOSTRAR MONTOS REGISTRADOS)
-    # =========================================================================
-    def vista_cierre_caja():
-        resumen = modelo.obtener_resumen_turno_db(sesion["id_turno"]) or {}
+    def _mostrar_resultado_cierre(self, contado, hay_faltante):
+        bloques = [
+            ft.Text(
+                "Tu cierre de caja se registró correctamente en el sistema.",
+                size=14,
+                weight=ft.FontWeight.BOLD,
+                color=COLOR_VERDE,
+            ),
+            ft.Container(
+                bgcolor=COLOR_GRIS_CLARO,
+                border=borde_all(1, COLOR_BORDE),
+                border_radius=8,
+                padding=10,
+                content=ft.Row(
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    controls=[
+                        ft.Text("Efectivo contado reportado:", size=13, weight=ft.FontWeight.BOLD),
+                        ft.Text(f"${contado:,.2f}", size=14, weight=ft.FontWeight.BOLD, color=COLOR_MARCA),
+                    ],
+                ),
+            ),
+        ]
+
+        if hay_faltante:
+            bloques.append(
+                ft.Container(
+                    bgcolor="#FDEDEC",
+                    border=borde_all(1, COLOR_ROJO),
+                    border_radius=8,
+                    padding=10,
+                    content=ft.Row(
+                        spacing=8,
+                        vertical_alignment=ft.CrossAxisAlignment.START,
+                        controls=[
+                            ft.Icon(ICON_ALERTA, color=COLOR_ROJO, size=22),
+                            ft.Text(
+                                "Se detectó un faltante en caja. El detalle del corte fue enviado para revisión del administrador.",
+                                size=13,
+                                color=COLOR_ROJO,
+                                weight=ft.FontWeight.BOLD,
+                                expand=True,
+                            ),
+                        ],
+                    ),
+                )
+            )
+        else:
+            bloques.append(
+                ft.Container(
+                    bgcolor="#EAFAF1",
+                    border=borde_all(1, COLOR_VERDE),
+                    border_radius=8,
+                    padding=10,
+                    content=ft.Text(
+                        "El reporte del corte fue registrado y enviado para revisión del administrador.",
+                        size=13,
+                        color="#1E8449",
+                    ),
+                )
+            )
+
+        def salir_a_login(_):
+            self.cerrar_dialogo(dlg_cierre)
+            self.mostrar_login()
+
+        dlg_cierre = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Cierre de Caja Finalizado"),
+            content=ft.Column(tight=True, spacing=10, controls=bloques),
+            actions=[
+                crear_boton("ACEPTAR Y SALIR", on_click=salir_a_login, bgcolor=COLOR_MARCA, color=COLOR_BLANCO),
+            ],
+        )
+        self.abrir_dialogo(dlg_cierre)
+
+    def _procesar_cierre_caja(self, monto_str, fondo_inicial):
+        try:
+            contado = round(float((monto_str or "").strip()), 2)
+            if contado < 0:
+                raise ValueError
+        except ValueError:
+            self.mostrar_aviso("Ingresa un monto válido (0 o mayor).", COLOR_ROJO)
+            return
+
+        # Validación interna contra fondo inicial + efectivo del turno sin mostrar diferencias
+        resumen_actual = self.modelo.obtener_resumen_turno_db(self.id_turno) or {}
+        efectivo_esperado = float(resumen_actual.get("efectivo_esperado") or fondo_inicial)
+        hay_faltante = contado < (efectivo_esperado - 0.009)
+
+        try:
+            self.modelo._ejecutar_consulta(
+                "UPDATE cortes_caja SET fecha_hora_fin=NOW(), efectivo_contado=%s, estado='cerrado' WHERE id_corte_caja=%s",
+                (contado, self.id_turno),
+            )
+        except Exception as ex:
+            self.mostrar_aviso(f"Error al registrar el cierre: {ex}", COLOR_ROJO)
+            return
+
+        self.modelo.ticket_actual.clear()
+        self.pagos.clear()
+        self.datos_factura = None
+        self.ultimo_comprobante = None
+        self.id_turno = None
+        self.ventas_turno_cache = None
+        self._mostrar_resultado_cierre(contado, hay_faltante)
+
+    def vista_cierre_caja(self):
+        resumen = self.modelo.obtener_resumen_turno_db(self.id_turno) or {}
         txt_efectivo = ft.TextField(
             label="Efectivo físico contado ($)",
             hint_text="Ejemplo: 500.00",
             keyboard_type=ft.KeyboardType.NUMBER,
-            bgcolor="#FFFFFF",
+            bgcolor=COLOR_BLANCO,
         )
 
         inicio = resumen.get("fecha_hora_inicio")
@@ -1332,122 +1446,17 @@ def main(page: ft.Page):
         fondo_inicial = float(resumen.get("fondo_inicial") or 500.0)
         num_ventas = int(resumen.get("num_ventas") or 0)
 
-        # Corte ciego: NUNCA muestra total vendido, efectivo cobrado, tarjeta ni esperado
         filas = [
-            ("Usuario / Rol:", f"{sesion['usuario']} ({sesion['rol']})"),
-            ("Caja / Turno:", f"{resumen.get('numero_caja', 'N/D')} (Corte #{sesion['id_turno']})"),
+            ("Usuario / Rol:", f"{self.usuario} ({self.rol})"),
+            ("Caja / Turno:", f"{resumen.get('numero_caja', 'N/D')} (Corte #{self.id_turno})"),
             ("Inicio de turno:", inicio_str),
             ("Fondo inicial de caja:", f"${fondo_inicial:,.2f}"),
             ("Operaciones realizadas:", f"{num_ventas} venta(s)"),
         ]
 
-        def finalizar_turno(e):
-            try:
-                contado = round(float((txt_efectivo.value or "").strip()), 2)
-                if contado < 0:
-                    raise ValueError
-            except ValueError:
-                mostrar_aviso("Ingresa un monto válido (0 o mayor).", COLOR_ROJO)
-                return
-
-            # Valida faltante internamente usando fondo inicial ($500) + efectivo del turno
-            resumen_actual = modelo.obtener_resumen_turno_db(sesion["id_turno"]) or resumen
-            efectivo_esperado = float(resumen_actual.get("efectivo_esperado") or fondo_inicial)
-            hay_faltante = contado < (efectivo_esperado - 0.009)
-
-            try:
-                modelo._ejecutar_consulta(
-                    "UPDATE cortes_caja SET fecha_hora_fin=NOW(), efectivo_contado=%s, estado='cerrado' WHERE id_corte_caja=%s",
-                    (contado, sesion["id_turno"]),
-                )
-            except Exception as ex:
-                mostrar_aviso(f"Error al registrar el cierre: {ex}", COLOR_ROJO)
-                return
-
-            modelo.ticket_actual.clear()
-            sesion["pagos"].clear()
-            sesion["datos_factura"] = None
-            sesion["ultimo_comprobante"] = None
-            sesion["id_turno"] = None
-            sesion["ventas_turno_cache"] = None
-
-            bloques_resultado = [
-                ft.Text(
-                    "Tu cierre de caja se registró correctamente en el sistema.",
-                    size=14,
-                    weight=ft.FontWeight.BOLD,
-                    color=COLOR_VERDE,
-                ),
-                ft.Container(
-                    bgcolor="#F4F4F4",
-                    border=borde_all(1, "#DDDDDD"),
-                    border_radius=8,
-                    padding=10,
-                    content=ft.Row(
-                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        controls=[
-                            ft.Text("Efectivo contado reportado:", size=13, weight=ft.FontWeight.BOLD),
-                            ft.Text(f"${contado:,.2f}", size=14, weight=ft.FontWeight.BOLD, color=COLOR_MARCA),
-                        ],
-                    ),
-                ),
-            ]
-
-            if hay_faltante:
-                bloques_resultado.append(
-                    ft.Container(
-                        bgcolor="#FDEDEC",
-                        border=borde_all(1, COLOR_ROJO),
-                        border_radius=8,
-                        padding=10,
-                        content=ft.Row(
-                            spacing=8,
-                            vertical_alignment=ft.CrossAxisAlignment.START,
-                            controls=[
-                                ft.Icon(ICON_ALERTA, color=COLOR_ROJO, size=22),
-                                ft.Text(
-                                    "Se detectó un faltante en caja. El detalle del corte fue enviado para revisión del administrador.",
-                                    size=13,
-                                    color=COLOR_ROJO,
-                                    weight=ft.FontWeight.BOLD,
-                                    expand=True,
-                                ),
-                            ],
-                        ),
-                    )
-                )
-            else:
-                bloques_resultado.append(
-                    ft.Container(
-                        bgcolor="#EAFAF1",
-                        border=borde_all(1, COLOR_VERDE),
-                        border_radius=8,
-                        padding=10,
-                        content=ft.Text(
-                            "El reporte del corte fue registrado y enviado para revisión del administrador.",
-                            size=13,
-                            color="#1E8449",
-                        ),
-                    )
-                )
-
-            def salir_a_login(ev):
-                cerrar_dialogo(dlg_cierre)
-                mostrar_login()
-
-            dlg_cierre = ft.AlertDialog(
-                modal=True,
-                title=ft.Text("Cierre de Caja Finalizado"),
-                content=ft.Column(tight=True, spacing=10, controls=bloques_resultado),
-                actions=[
-                    crear_boton("ACEPTAR Y SALIR", on_click=salir_a_login, bgcolor=COLOR_MARCA, color="#FFFFFF"),
-                ],
-            )
-            abrir_dialogo(dlg_cierre)
-
         return ft.Container(
-            bgcolor="#FFFFFF",
-            border=borde_all(1, "#DDDDDD"),
+            bgcolor=COLOR_BLANCO,
+            border=borde_all(1, COLOR_BORDE),
             border_radius=10,
             padding=16,
             content=ft.Column(
@@ -1458,7 +1467,7 @@ def main(page: ft.Page):
                     ft.Text(
                         "Cuenta el dinero físico en tu caja e ingrésalo abajo. El reporte detallado se envía automáticamente a administración.",
                         size=12,
-                        color="#555555",
+                        color=COLOR_TEXTO_SEC,
                         text_align=ft.TextAlign.CENTER,
                     ),
                     ft.Divider(),
@@ -1476,34 +1485,40 @@ def main(page: ft.Page):
                     txt_efectivo,
                     crear_boton(
                         "FINALIZAR TURNO Y CERRAR SESIÓN",
-                        on_click=finalizar_turno,
+                        on_click=lambda _: self._procesar_cierre_caja(txt_efectivo.value, fondo_inicial),
                         bgcolor=COLOR_ROJO,
-                        color="#FFFFFF",
+                        color=COLOR_BLANCO,
                         height=46,
                     ),
                 ],
             ),
         )
 
-    def cambiar_seccion(indice):
-        sesion["vista_actual"] = indice
-        if page.navigation_bar:
-            page.navigation_bar.selected_index = indice
-        vistas = [vista_punto_venta, vista_cobros, vista_tickets, vista_historial, vista_cierre_caja]
-        contenedor_cuerpo.content = vistas[indice]()
-        safe_update()
+    def cambiar_seccion(self, indice):
+        self.vista_actual = indice
+        if self.page.navigation_bar:
+            self.page.navigation_bar.selected_index = indice
+        vistas = (
+            self.vista_punto_venta,
+            self.vista_cobros,
+            self.vista_tickets,
+            self.vista_historial,
+            self.vista_cierre_caja,
+        )
+        self.contenedor_cuerpo.content = vistas[indice]()
+        self.safe_update()
 
-    def cargar_layout_principal():
-        page.controls.clear()
-        page.appbar = ft.AppBar(
+    def cargar_layout_principal(self):
+        self.page.controls.clear()
+        self.page.appbar = ft.AppBar(
             title=ft.Row(
                 spacing=8,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
                 controls=[
-                    ft.Icon(ICON_TIENDA, color="#FFFFFF", size=20),
+                    ft.Icon(ICON_TIENDA, color=COLOR_BLANCO, size=20),
                     crear_texto(
-                        f"Algorrico - {sesion['usuario']}",
-                        color="#FFFFFF",
+                        f"Algorrico - {self.usuario}",
+                        color=COLOR_BLANCO,
                         weight=ft.FontWeight.BOLD,
                         size=15,
                         max_lines=1,
@@ -1515,17 +1530,17 @@ def main(page: ft.Page):
             actions=[
                 ft.IconButton(
                     icon=ICONS.LOGOUT,
-                    icon_color="#FFFFFF",
+                    icon_color=COLOR_BLANCO,
                     tooltip="Cierre de Caja",
-                    on_click=lambda e: cambiar_seccion(4),
+                    on_click=lambda _: self.cambiar_seccion(4),
                 )
             ],
         )
 
-        page.navigation_bar = ft.NavigationBar(
+        self.page.navigation_bar = ft.NavigationBar(
             selected_index=0,
-            bgcolor="#FFFFFF",
-            on_change=lambda e: cambiar_seccion(e.control.selected_index),
+            bgcolor=COLOR_BLANCO,
+            on_change=lambda e: self.cambiar_seccion(e.control.selected_index),
             destinations=[
                 ft.NavigationBarDestination(icon=ICONS.POINT_OF_SALE, label="Venta"),
                 ft.NavigationBarDestination(icon=ICONS.PAYMENTS, label="Cobros"),
@@ -1535,10 +1550,13 @@ def main(page: ft.Page):
             ],
         )
 
-        page.add(contenedor_cuerpo)
-        cambiar_seccion(0)
+        self.page.add(self.contenedor_cuerpo)
+        self.cambiar_seccion(0)
 
-    mostrar_login()
+
+def main(page: ft.Page):
+    app = AppMovil(page)
+    app.mostrar_login()
 
 
 if __name__ == "__main__":
@@ -1551,7 +1569,6 @@ if __name__ == "__main__":
         else:
             ft.app(target=main, view=ft.AppView.WEB_BROWSER, host=host, port=puerto, assets_dir=DIR_ASSETS)
     else:
-        # Modo nativo para Android APK 
         if hasattr(ft, "run"):
             ft.run(main, assets_dir=DIR_ASSETS)
         else:
