@@ -45,7 +45,7 @@ def _resolver_ssl_ca() -> str | None:
 _cargar_entorno()
 
 
-def obtener_conexion():
+def conectar_bd():
     host = (os.getenv("DB_HOST") or "").strip()
     port_raw = (os.getenv("DB_PORT") or "4000").strip()
     user = (os.getenv("DB_USER") or "").strip()
@@ -72,3 +72,7 @@ def obtener_conexion():
         config["ssl_verify_cert"] = True
 
     return mysql.connector.connect(**config)
+
+
+def obtener_conexion():
+    return conectar_bd()
