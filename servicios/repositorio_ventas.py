@@ -26,9 +26,10 @@ class RepositorioVentas:
         try:
             cursor = conexion.cursor()
 
-            subtotal = round(sum(float(item["subtotal"]) for item in carrito), 2)
-            impuesto = round(subtotal * 0.16, 2)
-            total = round(subtotal + impuesto, 2)
+            # Precios con IVA (16%) incluido: se desglosa sin sumar impuesto extra
+            total = round(sum(float(item["subtotal"]) for item in carrito), 2)
+            subtotal = round(total / 1.16, 2)
+            impuesto = round(total - subtotal, 2)
             folio = self._siguiente_folio(cursor, "ventas", "VTA", 6)
 
             cursor.execute("""
@@ -174,7 +175,7 @@ class RepositorioVentas:
 
             cur.execute(f"""
                 SELECT v.id_venta, v.folio, v.fecha_hora,
-                       v.subtotal, (v.subtotal + v.impuesto) AS total,
+                       v.subtotal, v.impuesto, (v.subtotal + v.impuesto) AS total,
                        COALESCE((SELECT mp.nombre_metodo_pago FROM pagos_ventas pv
                                  JOIN metodos_pago mp ON pv.id_metodo_pago = mp.id_metodo_pago
                                  WHERE pv.id_venta = v.id_venta LIMIT 1), 'Efectivo') AS metodo_pago
@@ -192,6 +193,8 @@ class RepositorioVentas:
                     WHERE dv.id_venta = %s
                 """, (v["id_venta"],))
                 v["articulos"] = cur.fetchall()
+                v["subtotal"] = float(v["subtotal"])
+                v["impuesto"] = float(v["impuesto"])
                 v["total"] = float(v["total"])
                 yield v, i
         finally:
@@ -206,11 +209,12 @@ class RepositorioVentas:
             limite_sql = f"LIMIT {int(limite)}" if limite else ""
             cur.execute(f"""
                 SELECT v.id_venta, v.folio, v.fecha_hora,
-                       v.subtotal, (v.subtotal + v.impuesto) AS total,
+                       v.subtotal, v.impuesto, (v.subtotal + v.impuesto) AS total,
                        COALESCE((SELECT mp.nombre_metodo_pago FROM pagos_ventas pv
                                  JOIN metodos_pago mp ON pv.id_metodo_pago = mp.id_metodo_pago
                                  WHERE pv.id_venta = v.id_venta LIMIT 1), 'Efectivo') AS metodo_pago,
-                       CASE WHEN f.id_factura IS NOT NULL THEN 'Facturada' ELSE 'Sin Factura' END AS estado_factura
+                       CASE WHEN f.id_factura IS NOT NULL THEN 'Facturada' ELSE 'Sin Factura' END AS estado_factura,
+                       f.folio AS folio_factura
                 FROM ventas v
                 LEFT JOIN facturas f ON v.id_venta = f.id_venta
                 ORDER BY v.id_venta DESC
@@ -223,7 +227,7 @@ class RepositorioVentas:
             ids_venta = [r["id_venta"] for r in rows]
             placeholders = ", ".join(["%s"] * len(ids_venta))
             cur.execute(f"""
-                SELECT dv.id_venta, p.nombre_dulce AS producto, dv.cantidad, dv.subtotal
+                SELECT dv.id_venta, p.nombre_dulce AS producto, dv.cantidad, dv.precio_unitario, dv.subtotal
                 FROM detalles_ventas dv
                 JOIN productos p ON dv.id_producto = p.id_producto
                 WHERE dv.id_venta IN ({placeholders})
@@ -233,18 +237,22 @@ class RepositorioVentas:
             for det in cur.fetchall():
                 detalles_por_venta[det["id_venta"]].append({
                     "producto": det["producto"],
-                    "cantidad": det["cantidad"],
-                    "subtotal": det["subtotal"],
+                    "cantidad": int(det["cantidad"]),
+                    "precio_unitario": float(det.get("precio_unitario") or 0),
+                    "subtotal": float(det["subtotal"]),
                 })
 
             for r in rows:
-                r["fecha"] = r["fecha_hora"].strftime("%Y-%m-%d %H:%M:%S") if r.get("fecha_hora") else ""
+                fh = r.get("fecha_hora")
+                r["fecha"] = fh.strftime("%Y-%m-%d %H:%M:%S") if hasattr(fh, "strftime") else str(fh or "")
                 r["articulos"] = detalles_por_venta.get(r["id_venta"], [])
+                r["subtotal"] = float(r.get("subtotal") or 0)
+                r["impuesto"] = float(r.get("impuesto") or 0)
                 r["total"] = float(r["total"])
             return rows
         finally:
             conexion.close()
-            
+
     def obtener_por_turno(self, id_corte_caja, limite=200):
         if not id_corte_caja:
             return []
@@ -294,9 +302,9 @@ class RepositorioVentas:
                 fh = r.get("fecha_hora")
                 r["fecha"] = fh.strftime("%Y-%m-%d %H:%M:%S") if hasattr(fh, "strftime") else str(fh or "")
                 r["articulos"] = detalles_por_venta.get(r["id_venta"], [])
-                r["total"] = float(r["total"])
                 r["subtotal"] = float(r.get("subtotal") or 0)
                 r["impuesto"] = float(r.get("impuesto") or 0)
+                r["total"] = float(r["total"])
             return rows
         finally:
             conexion.close()
